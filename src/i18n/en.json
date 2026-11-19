@@ -60,12 +60,28 @@
     "disconnectSpotifyTitle": "Disconnect Spotify?",
     "disconnectSpotifyBody": "Your Spotify library will be removed from Unison. Nothing changes on Spotify.",
     "byokTitle": "Connect Spotify",
-    "byokStep1": "Open the Spotify Developer Dashboard and create an app with Web API.",
-    "byokStep2": "Add these redirect URIs to the app.",
+    "byokStep1": "Create an app in the Spotify Developer Dashboard and tick Web API.",
+    "byokStep2": "Add these redirect URIs to the app, then save it.",
     "byokStep3": "Paste the app's Client ID.",
     "openDashboard": "Open Developer Dashboard",
     "clientId": "Client ID",
-    "invalidClientId": "That doesn't look like a Spotify Client ID."
+    "invalidClientId": "That doesn't look like a Spotify Client ID.",
+    "section": "Accounts",
+    "statusConnected": "Connected",
+    "statusNotConnected": "Not connected",
+    "statusNeedsReconnect": "Reconnect needed",
+    "statusSyncing": "Syncing",
+    "youtubeLater": "Available in a later update",
+    "byokUsers": "In the app's User Management, add the email of the Spotify account you'll sign in with.",
+    "clientIdSaved": "A Client ID is saved. Paste a new one to replace it.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "waiting": "Approve Unison in your browser to finish.",
+    "waitingHint": "Seeing INVALID_CLIENT in the browser? Check the Client ID, and that all three redirect URIs are added to the app exactly as shown.",
+    "cancel": "Cancel",
+    "connectedToast": "Spotify connected",
+    "connectedAs": "Connected as {name}",
+    "clientIdRequired": "Paste your Client ID first."
   },
   "feedback": {
     "offline": "You're offline. Showing your saved library.",
@@ -158,7 +174,8 @@
   },
   "account": {
     "notConnected": "No account connected",
-    "connect": "Connect an account"
+    "connect": "Connect an account",
+    "connectedTo": "{provider} · {name}"
   },
   "pages": {
     "home": {
@@ -226,7 +243,8 @@
     "notFound": "That item is no longer available.",
     "upstream": "The service had a problem ({status}). Try again in a moment.",
     "internal": "Something went wrong. Try again; if it keeps happening, restart Unison.",
-    "unknown": "Something went wrong. Try again."
+    "unknown": "Something went wrong. Try again.",
+    "userNotRegistered": "This Spotify account isn't added to your developer app. Add its email under User Management in the Spotify dashboard, then connect again."
   },
   "settings": {
     "about": "About",

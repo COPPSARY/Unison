@@ -13,8 +13,9 @@ import {
 import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { Icon, Tooltip } from "@/components/ui";
-import { strings } from "@/i18n";
+import { format, strings } from "@/i18n";
 import { cn } from "@/lib/cn";
+import { useAccounts } from "@/lib/queries";
 import { useUiStore, type SidebarSection } from "@/stores/ui";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
@@ -120,6 +121,38 @@ function Section({
 }
 
 /** Floating glass sidebar, Finder-style (240 px, 64 px collapsed). */
+/** Footer line: connected accounts, or a muted "No account connected". */
+function AccountStatusLine() {
+  const accounts = useAccounts();
+  const connected = (accounts.data ?? []).filter((a) => a.status !== "notConnected");
+  if (connected.length === 0) {
+    return (
+      <p className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-tertiary">
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-text-tertiary" />
+        {strings.account.notConnected}
+      </p>
+    );
+  }
+  return (
+    <>
+      {connected.map((a) => (
+        <p key={a.provider} className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-muted">
+          <span
+            aria-hidden="true"
+            className={cn("size-1.5 shrink-0 rounded-full", a.status === "needsReconnect" ? "bg-warning" : "bg-success")}
+          />
+          <span className="truncate">
+            {format(strings.account.connectedTo, {
+              provider: strings.source[a.provider],
+              name: a.displayName ?? "",
+            })}
+          </span>
+        </p>
+      ))}
+    </>
+  );
+}
+
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const devItems: NavItem[] = import.meta.env.DEV
     ? [{ to: "/dev/ui", label: strings.nav.uiKit, icon: Palette }]
@@ -167,12 +200,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           item={{ to: "/settings", label: strings.nav.settings, icon: Settings }}
           collapsed={collapsed}
         />
-        {collapsed ? null : (
-          <p className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-tertiary">
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-text-tertiary" />
-            {strings.account.notConnected}
-          </p>
-        )}
+        {collapsed ? null : <AccountStatusLine />}
       </div>
     </nav>
   );

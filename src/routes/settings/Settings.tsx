@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui";
 import { strings } from "@/i18n";
 import { errorMessage } from "@/lib/errors";
 import { useAppInfo } from "@/lib/queries";
+import { AccountsSection } from "./AccountsSection";
 
 const t = strings.pages.settings;
 const s = strings.settings;
@@ -17,13 +18,15 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Settings (max 720 px). Accounts, playback, appearance, sync and data arrive with T-11/16/71. */
+/** Settings (max 720 px). Playback, appearance, sync and data arrive with T-16 / T-71. */
 export function Settings() {
   const info = useAppInfo();
 
   return (
     <Page title={t.title}>
-      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-2">
+      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-8">
+        <AccountsSection />
+        <div className="flex flex-col gap-2">
         <h2 className="px-4 text-footnote font-bold text-text-tertiary">{s.about}</h2>
         <section className="rounded-card bg-surface">
           {info.isError ? (
@@ -41,6 +44,7 @@ export function Settings() {
             </>
           )}
         </section>
+        </div>
       </div>
     </Page>
   );

@@ -12,6 +12,9 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::StateFlags;
 
 use crate::core::window_material::{self, Material};
+use std::sync::Arc;
+
+use crate::core::auth::keychain::Keychain;
 use crate::state::{AppState, LogGuard};
 
 /// Builds the main window in code so the backdrop material can depend on the Windows build.
@@ -49,7 +52,7 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         e
     })?;
     let settings = tauri::async_runtime::block_on(core::db::settings::load(&pool)).unwrap_or_default();
-    app.manage(AppState { db: pool });
+    app.manage(AppState::new(pool, state::http_client()?, Arc::new(Keychain)));
     Ok(settings.window_material)
 }
 

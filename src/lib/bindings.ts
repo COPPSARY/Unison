@@ -14,6 +14,20 @@ export const commands = {
 	settingsGet: (options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_get", undefined, options),
 	/**  Saves settings and returns the stored (sanitised) value. */
 	settingsSet: (settings: Settings_Deserialize, options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_set", { settings }, options),
+	/**  One entry per provider with its status. */
+	accountsList: (options?: InvokeOptions) => __TAURI_INVOKE<Account_Serialize[]>("accounts_list", undefined, options),
+	/**  Validates and stores the Spotify Client ID in the keychain. Never echoed back. */
+	spotifySetClientId: (clientId: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("spotify_set_client_id", { clientId }, options),
+	/**  Whether a Spotify Client ID is saved (the UI never sees the value). */
+	spotifyHasClientId: (options?: InvokeOptions) => __TAURI_INVOKE<boolean>("spotify_has_client_id", undefined, options),
+	/**  Spotify onboarding: redirect URIs to register in the developer app. */
+	spotifyRedirectUris: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("spotify_redirect_uris", undefined, options),
+	/**  Opens the Spotify Developer Dashboard in the default browser. */
+	spotifyOpenDashboard: (options?: InvokeOptions) => __TAURI_INVOKE<null>("spotify_open_dashboard", undefined, options),
+	/**  Runs the interactive login for `provider` (5-minute timeout, cancellable). */
+	accountConnect: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<Account_Serialize>("account_connect", { provider }, options),
+	/**  Cancels a connect that is waiting for the browser. */
+	accountCancelConnect: (options?: InvokeOptions) => __TAURI_INVOKE<void>("account_cancel_connect", undefined, options),
 };
 
 /* Types */
@@ -51,7 +65,9 @@ export type AppInfo = {
 };
 
 /**  Machine-readable error kind, serialised as `{ "type": "rateLimited", "retryAfter": 30 }`. */
-export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type: "authTimeout" } | { type: "needsReconnect" } | { type: "invalidClientId" } | { type: "redirectUriMismatch" } | { type: "spotifyPremiumRequired" } | { type: "noSpotifyDevice" } | { type: "rateLimited"; 
+export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type: "authTimeout" } | { type: "needsReconnect" } | { type: "invalidClientId" } | { type: "redirectUriMismatch" } | { type: "spotifyPremiumRequired" } | 
+/**  Spotify Development Mode: the signed-in user is not listed under User Management. */
+{ type: "userNotRegistered" } | { type: "noSpotifyDevice" } | { type: "rateLimited"; 
 /**  Seconds until the next request is allowed. */
 retryAfter: number } | { type: "youtubeQuotaExceeded"; 
 /**  Unix seconds when the daily quota resets (midnight Pacific). */

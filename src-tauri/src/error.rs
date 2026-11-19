@@ -16,6 +16,8 @@ pub enum ErrorCode {
     InvalidClientId,
     RedirectUriMismatch,
     SpotifyPremiumRequired,
+    /// Spotify Development Mode: the signed-in user is not listed under User Management.
+    UserNotRegistered,
     NoSpotifyDevice,
     RateLimited {
         /// Seconds until the next request is allowed.

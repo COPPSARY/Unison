@@ -19,6 +19,13 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::app::app_info,
             commands::settings::settings_get,
             commands::settings::settings_set,
+            commands::accounts::accounts_list,
+            commands::accounts::spotify_set_client_id,
+            commands::accounts::spotify_has_client_id,
+            commands::accounts::spotify_redirect_uris,
+            commands::accounts::spotify_open_dashboard,
+            commands::accounts::account_connect,
+            commands::accounts::account_cancel_connect,
         ])
         .typ::<AppError>()
         .typ::<Account>()

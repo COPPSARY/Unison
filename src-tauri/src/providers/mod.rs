@@ -1,6 +1,8 @@
 //! Music platforms behind one trait. A new platform = a new module implementing
 //! [`MusicProvider`]; commands and the UI never contain provider-specific logic.
 
+pub mod spotify;
+
 use async_trait::async_trait;
 
 use crate::error::AppResult;

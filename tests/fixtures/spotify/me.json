@@ -1,0 +1,9 @@
+{
+  "display_name": "Demo Listener",
+  "external_urls": { "spotify": "https://open.spotify.com/user/demo-user" },
+  "href": "https://api.spotify.com/v1/users/demo-user",
+  "id": "demo-user",
+  "images": [],
+  "type": "user",
+  "uri": "spotify:user:demo-user"
+}

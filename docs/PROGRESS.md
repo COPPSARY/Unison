@@ -11,6 +11,20 @@ Acceptance criteria:
 - Green on all three OSes.
 - Status: pushed (f25acf7); waiting for the owner to confirm the first run.
 
+### T-11 — Spotify BYOK onboarding + connect
+Acceptance criteria:
+- Settings → Accounts lists Spotify and YouTube with status and connected name.
+- Connect Spotify opens a 3-step drawer: open Developer Dashboard · redirect URIs with copy
+  buttons · paste Client ID → Connect opens the browser.
+- `spotify_set_client_id` validates the format (32 hex) and stores it only in the keychain;
+  the UI only learns whether one is saved.
+- `account_connect(spotify)` runs PKCE loopback (ports 43821–43823), exchanges the code,
+  reads `GET /me`, stores tokens in the keychain and the account row in SQLite.
+- Errors: bad format → InvalidClientId inline; wrong ID / redirect mismatch are only visible in
+  the browser (Spotify validates after login) → a hint appears while waiting + Cancel;
+  account not in User Management (403 on /me) → UserNotRegistered with the fix.
+- Fixture tests for /me and the 403 case; UI tests for drawer validation and states.
+
 ## Done
 
 - **T-10 — PKCE, loopback, keychain** (2026-11-19): `core/auth`: PKCE S256 (64-byte verifier,
