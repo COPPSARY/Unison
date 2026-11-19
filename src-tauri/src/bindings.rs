@@ -7,6 +7,7 @@ use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::commands;
+use crate::core::local::{LocalChanged, LocalImportProgress};
 use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::player::PlayerSnapshot;
 use crate::core::playback::service::{PlayerFallback, PlayerStateEvent};
@@ -58,8 +59,17 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::player::player_outputs,
             commands::player::player_set_output,
             commands::player::player_test_sound,
+            commands::local::local_import,
         ])
-        .events(collect_events![SyncProgress, SyncFinished, YoutubeCommand, PlayerStateEvent, PlayerFallback])
+        .events(collect_events![
+            SyncProgress,
+            SyncFinished,
+            YoutubeCommand,
+            PlayerStateEvent,
+            PlayerFallback,
+            LocalImportProgress,
+            LocalChanged
+        ])
         .typ::<AppError>()
         .typ::<Account>()
         .typ::<Track>()

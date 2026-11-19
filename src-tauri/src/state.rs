@@ -24,6 +24,8 @@ pub struct AppState {
     /// Official IFrame player in the webview (UP-07).
     pub youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     pub sync: SyncManager,
+    /// Local file imports, one at a time (UP-10).
+    pub local: crate::core::local::LocalImports,
     /// Spotify Premium answer, cached 1 h (UP-04).
     pub spotify_premium: Arc<crate::providers::spotify::player::PremiumCache>,
     /// Spotify Connect remote control (UP-08).
@@ -63,6 +65,7 @@ impl AppState {
             native,
             youtube,
             sync: SyncManager::default(),
+            local: crate::core::local::LocalImports::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),
             spotify_premium,

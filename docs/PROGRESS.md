@@ -79,6 +79,20 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and
+  §8.2 matcher (in-memory index per job; two precision additions for T-30 to review: titles
+  with different numbers never merge, and " - Remastered 2009" suffixes count as noise);
+  `core/local`: walk (configured extensions, no symlinked dirs), lofty tags + `Artist - Title`
+  file-name fallback, fingerprint = size + BLAKE3(first 1 MB + last 64 KB), covers ≤ 600 px
+  JPEG in `<app data>/artwork`, per-file reasons (missing / unsupportedFormat incl. opus /
+  drmProtected .m4p / unreadable). Files merge into existing songs through the matcher, then
+  `local_files`, `track_sources(local)` and `library(local, local)`; moved files are followed,
+  second copies skipped, re-tagged files replaced. `local_import(paths)` → job id;
+  background batches of 200 with `local://import-progress`, `local://changed` at the end,
+  one job at a time. Tests: 1,000-file import + no-op re-import, liked-Spotify merge, ISRC
+  merge, moved/copied/re-tagged files, bad-file reasons. Spotify sync still creates its own
+  rows until T-31; local covers and marks show in the UI with UP-11.
+
 - **UP-08 — SpotifyConnectEngine** (2026-11-19): remote control via PUT /me/player/play {uris,
   position_ms} on the chosen / active / first controllable device, pause / resume / seek /
   volume, 1 s polling of GET /me/player with the §8.6 ended rules; Premium 403 → not-Premium +

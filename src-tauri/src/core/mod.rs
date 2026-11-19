@@ -1,6 +1,8 @@
 pub mod auth;
 pub mod db;
+pub mod local;
 pub mod logging;
+pub mod matching;
 pub mod playback;
 pub mod playlists;
 pub mod sync;

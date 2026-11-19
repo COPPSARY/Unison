@@ -83,10 +83,17 @@ export const commands = {
 	playerSetOutput: (device: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("player_set_output", { device }, options),
 	/**  Plays a short quiet tone through the NativeEngine to check the output device. */
 	playerTestSound: (options?: InvokeOptions) => __TAURI_INVOKE<null>("player_test_sound", undefined, options),
+	/**
+	 *  Imports audio files and folders (referenced in place). Returns the job id at once; progress
+	 *  arrives as `local://import-progress`, and `local://changed` when the library changed.
+	 */
+	localImport: (paths: string[], options?: InvokeOptions) => __TAURI_INVOKE<number>("local_import", { paths }, options),
 };
 
 /** Events */
 export const events = {
+	localChanged: makeEvent<LocalChanged, LocalChanged>("local://changed"),
+	localImportProgress: makeEvent<LocalImportProgress_Serialize, LocalImportProgress_Deserialize>("local://import-progress"),
 	playerFallback: makeEvent<PlayerFallback, PlayerFallback>("player://fallback"),
 	playerState: makeEvent<PlayerStateEvent_Serialize, PlayerStateEvent_Deserialize>("player://state"),
 	playerYoutubeCommand: makeEvent<YoutubeCommand, YoutubeCommand>("player://youtube-command"),
@@ -197,6 +204,22 @@ retryAfter: number } | { type: "youtubeQuotaExceeded";
 /**  Unix seconds when the daily quota resets (midnight Pacific). */
 resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "noPlayableSource" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "drmProtected" } | { type: "audiusUnavailable" } | { type: "youtubeEmbedBlocked"; code: number } | { type: "outputDeviceUnavailable" } | { type: "internal" };
 
+export type Issue = {
+	path: string,
+	reason: IssueKind,
+};
+
+/**  Why a file was not imported. */
+export type IssueKind = 
+/**  The path no longer exists. */
+"missing" | 
+/**  Not an audio type this build can play (e.g. opus, or a non-audio file chosen directly). */
+"unsupportedFormat" | 
+/**  DRM-protected purchase (.m4p). */
+"drmProtected" | 
+/**  Could not be read or parsed. */
+"unreadable";
+
 /**  Sort orders for list and grid views. */
 export type LibrarySort = "dateAdded" | "title" | "artist";
 
@@ -204,6 +227,52 @@ export type LibrarySort = "dateAdded" | "title" | "artist";
 export type ListStats = {
 	count: number,
 	durationMs: number | null,
+};
+
+/**  `local://changed`: the local library changed (sent at the end of a job that changed it). */
+export type LocalChanged = {
+	added: number,
+	removed: number,
+	updated: number,
+};
+
+/**  `local://import-progress`: sent after every batch and once more with `finished: true`. */
+export type LocalImportProgress = LocalImportProgress_Serialize | LocalImportProgress_Deserialize;
+
+/**  `local://import-progress`: sent after every batch and once more with `finished: true`. */
+export type LocalImportProgress_Deserialize = {
+	jobId: number,
+	/**  Audio files looked at so far. */
+	scanned: number,
+	/**  Known once the paths have been walked. */
+	total?: number | null,
+	/**  New or updated in the library. */
+	imported: number,
+	/**  Already imported and unchanged (or a second copy of an imported file). */
+	skipped: number,
+	/**  Per-file problems so far (first `MAX_ISSUES`). */
+	errors: Issue[],
+	finished: boolean,
+	/**  Set when the job stopped early. */
+	error?: AppError | null,
+};
+
+/**  `local://import-progress`: sent after every batch and once more with `finished: true`. */
+export type LocalImportProgress_Serialize = {
+	jobId: number,
+	/**  Audio files looked at so far. */
+	scanned: number,
+	/**  Known once the paths have been walked. */
+	total: number | null,
+	/**  New or updated in the library. */
+	imported: number,
+	/**  Already imported and unchanged (or a second copy of an imported file). */
+	skipped: number,
+	/**  Per-file problems so far (first `MAX_ISSUES`). */
+	errors: Issue[],
+	finished: boolean,
+	/**  Set when the job stopped early. */
+	error: AppError | null,
 };
 
 export type LocalSettings = LocalSettings_Serialize | LocalSettings_Deserialize;
