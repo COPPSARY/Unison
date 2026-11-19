@@ -68,3 +68,9 @@ Acceptance criteria:
   cargo test green; `pnpm tauri dev` opens the "Unison" window.
 
 ## Blocked
+
+- **Phase 2 (T-20 – T-24) / H4–H6:** Google Cloud asked the owner for a $50 prepayment before
+  the project could be used (2026-11-19). Not paying for now. YouTube work is parked; Spotify
+  and provider-independent tasks continue. Options later: retry with another Google account,
+  or revisit when budget allows. T-30 (matching) and T-41 (YouTube player) can still be built
+  and tested with fixtures; live YouTube verification waits on this.
