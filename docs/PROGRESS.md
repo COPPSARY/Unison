@@ -32,21 +32,15 @@ Acceptance criteria:
 - Status (2026-11-19): built and committed; Liked/Albums/Artists/Playlists + sidebar playlists
   read the real DB. Waiting for the owner to check 60 fps scrolling on the 10k demo DB.
 
-### T-15 — Playlist detail
-Acceptance criteria:
-- `playlist_get` (metadata, Open-in link, whether items are available, total duration when known)
-  and `playlist_tracks` (local, paged; first open of an owned/collaborative Spotify playlist
-  fetches `GET /playlists/{id}/items?limit=100` — Feb 2026 `item` shape, legacy `track`
-  accepted — and stores `playlist_items`; refetched when the snapshot changes).
-- Episodes and removed (null) items skipped; local files kept as unavailable.
-- Followed (non-owned) Spotify playlists: metadata + "Open in Spotify" and a one-line reason,
-  no items request (Spotify only returns items for playlists the user owns or collaborates on).
-- After a sync, owned playlists whose items were never loaded are fetched in the background.
-- Playlist page: header (artwork, title, owner, count + duration, Play / Shuffle / Open in
-  Spotify), virtualised table, loading / empty / not-found / error states.
-- Fixture tests for item mapping, lazy fetch-once, snapshot refetch, followed playlists.
-
 ## Done
+
+- **T-15 — Playlist detail** (2026-11-19): `playlist_get` / `playlist_tracks` /
+  `playlist_open_external`; owned/collaborative Spotify playlists load items on first open
+  (Feb 2026 `item` shape, legacy `track` accepted; episodes and null items skipped; local files
+  unavailable) and refetch after a snapshot change; followed playlists show metadata + Open in
+  Spotify with the reason and never request items; owned playlists prefetch after each sync.
+  Page with header, virtualised table and loading / empty / not-found / error states.
+  Rust + Vitest tests (84 frontend tests total).
 
 - **T-13 — Spotify sync** (2026-11-19): full sync profile → liked → playlists (metadata, Feb 2026
   `items` shape) → saved albums → followed artists → top/recent signals; per-page transactions;

@@ -146,3 +146,30 @@ export function usePlaylists({ provider, sort, query }: LibraryArgs) {
     enabled: enabled(),
   });
 }
+
+// ---------------------------------------------------------------- Playlist detail
+
+export function usePlaylist(id: string) {
+  return useQuery({
+    queryKey: ["playlist", id],
+    queryFn: () => commands.playlistGet(id),
+    enabled: enabled(),
+  });
+}
+
+/** Items in playlist order. The first page may load them from the platform (lazy, T-15). */
+export function usePlaylistTracks(id: string, itemsAvailable: boolean) {
+  const qc = useQueryClient();
+  return useInfiniteQuery({
+    queryKey: ["playlistTracks", id],
+    queryFn: async ({ pageParam }) => {
+      const page = await commands.playlistTracks(id, pageParam, LIKED_PAGE);
+      // The first load may have fetched items and updated count/duration.
+      if (pageParam === 0) void qc.invalidateQueries({ queryKey: ["playlist", id] });
+      return page;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    enabled: enabled() && itemsAvailable,
+  });
+}
