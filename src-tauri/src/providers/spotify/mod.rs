@@ -1,6 +1,7 @@
 //! Spotify provider (spec §6). Bring-your-own Client ID (ADR 0001), PKCE, Development Mode
 //! endpoints only. Sync, refresh/backoff and playback arrive in T-12 / T-13 / T-40.
 
+pub mod client;
 pub mod connect;
 
 use serde::Deserialize;

@@ -13,6 +13,11 @@ Acceptance criteria:
 
 ## Done
 
+- **T-12 — Spotify client** (2026-11-19): `SpotifyClient` with single-flight token refresh
+  (60 s margin + once on 401, rotated tokens persisted, invalid_grant → needs_reconnect),
+  429 Retry-After (≤3 retries, >60 s → RateLimited), 5xx backoff 0.5/1/2/4 s, 4-request
+  semaphore, `collect_pages` for offset and cursor paging. 9 wiremock tests.
+
 - **T-11 — Spotify BYOK onboarding + connect** (2026-11-19): Settings → Accounts, 3-step drawer
   (dashboard, redirect URIs with copy, Client ID), keychain-only Client ID, PKCE loopback
   connect + `/me`, tokens in Credential Manager, account row in SQLite, sidebar shows the
