@@ -69,6 +69,10 @@ jobs:
       - name: Rust tests
         run: cargo test
 
+      - name: Bindings are up to date
+        shell: bash
+        run: git diff --exit-code -- src/lib/bindings.ts
+
       - name: Build app bundle
         run: pnpm tauri build --bundles ${{ matrix.bundles }}
 

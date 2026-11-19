@@ -13,6 +13,16 @@ Acceptance criteria:
 
 ## Done
 
+- **T-05 — Rust core** (2026-11-19): `AppError` + `ErrorCode` (§9) serialised as a tagged union;
+  `tracing` to a daily file (+ stdout in debug) through a redacting writer (Authorization,
+  token/code/key params, token JSON); SQLite pool (WAL, FKs, busy timeout) with embedded
+  migration 0001 at `%APPDATA%/app.unison/unison.db`; tauri-specta bindings regenerated on every
+  debug run and by `cargo test` (CI fails on drift); first command `app_info` shown in
+  Settings → About via TanStack Query; UI error mapping in `src/lib/errors.ts`. Windows test
+  binaries now embed the Common Controls manifest (build.rs). 20 Rust + 54 Vitest tests.
+  Note for T-32: `tracks_fts` declares column `artists` but `tracks` has `artists_json`;
+  fix with a new migration before using external-content reads/rebuild.
+
 - **T-04 — Shell** (2026-11-19): undecorated window with custom glass title bar (drag,
   back/forward, Windows caption buttons), floating glass sidebar collapsing to icons below
   1100 px, floating glass player bar placeholder, all routes with empty states, shortcuts

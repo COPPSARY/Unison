@@ -1,10 +1,17 @@
-//! Unison app entry: builder, plugins and (from T-05 on) command registration.
+//! Unison app entry: builder, plugins, state and command registration.
 
+mod bindings;
+mod commands;
 mod core;
+mod error;
+mod model;
+mod state;
+
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_window_state::StateFlags;
 
 use crate::core::window_material::{self, Material};
-use tauri::{WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_window_state::StateFlags;
+use crate::state::{AppState, LogGuard};
 
 /// Builds the main window in code so the backdrop material can depend on the Windows build.
 fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
@@ -27,7 +34,30 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Logging, database and state. Errors here abort startup with a logged reason.
+fn init_core(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let paths = app.path();
+    let guard = core::logging::init(&paths.app_log_dir()?)?;
+    app.manage(LogGuard(guard));
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "starting unison");
+
+    let db_path = paths.app_data_dir()?.join(core::db::DB_FILE);
+    let pool = tauri::async_runtime::block_on(core::db::open(&db_path)).map_err(|e| {
+        tracing::error!(error = %e, "database failed to open");
+        e
+    })?;
+    app.manage(AppState { db: pool });
+    Ok(())
+}
+
 pub fn run() {
+    let specta = bindings::builder();
+
+    #[cfg(debug_assertions)]
+    if let Err(err) = bindings::export(&specta, bindings::BINDINGS_PATH) {
+        eprintln!("failed to export TypeScript bindings: {err}");
+    }
+
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // Restores size/position/maximised for windows created later in setup().
@@ -36,14 +66,17 @@ pub fn run() {
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
                 .build(),
         )
-        .setup(|app| {
+        .invoke_handler(specta.invoke_handler())
+        .setup(move |app| {
+            specta.mount_events(app);
+            init_core(app)?;
             create_main_window(app)?;
             Ok(())
         })
         .run(tauri::generate_context!());
 
     if let Err(err) = result {
-        // Logging via `tracing` arrives in T-05.
+        tracing::error!(error = %err, "unison exited with an error");
         eprintln!("unison failed to start: {err}");
         std::process::exit(1);
     }

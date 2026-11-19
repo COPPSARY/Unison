@@ -210,5 +210,27 @@
       "title": "Settings",
       "emptyBody": "Accounts, playback, appearance and data settings arrive in upcoming updates."
     }
+  },
+  "errors": {
+    "offline": "You are offline. Check your connection and try again.",
+    "authCancelled": "Sign-in was cancelled. Try connecting again.",
+    "authTimeout": "Sign-in timed out. Try connecting again.",
+    "needsReconnect": "Your account needs to sign in again. Reconnect it in Settings.",
+    "invalidClientId": "That Client ID was not accepted. Copy it again from the Spotify dashboard.",
+    "redirectUriMismatch": "The redirect URIs do not match. Add the exact URIs shown, then try again.",
+    "spotifyPremiumRequired": "Playback needs Spotify Premium.",
+    "noSpotifyDevice": "Open Spotify on this PC or your phone, then pick it here.",
+    "rateLimited": "Too many requests. Try again in {seconds} s.",
+    "youtubeQuotaExceeded": "YouTube daily limit reached. Resets at {time}.",
+    "notEmbeddable": "This video can't be played outside YouTube. Open it on YouTube instead.",
+    "notFound": "That item is no longer available.",
+    "upstream": "The service had a problem ({status}). Try again in a moment.",
+    "internal": "Something went wrong. Try again; if it keeps happening, restart Unison.",
+    "unknown": "Something went wrong. Try again."
+  },
+  "settings": {
+    "about": "About",
+    "version": "Version",
+    "schema": "Database schema"
   }
 }
