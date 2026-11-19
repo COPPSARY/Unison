@@ -1,6 +1,8 @@
 //! SQLite pool (spec §7): WAL mode, foreign keys on, migrations applied at startup.
 //! Tokens and the Spotify Client ID never go in this database (keychain only).
 
+pub mod settings;
+
 use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;

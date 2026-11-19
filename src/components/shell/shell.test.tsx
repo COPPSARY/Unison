@@ -2,6 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { usePlayerStore } from "@/stores/player";
+import { useUiStore } from "@/stores/ui";
 import { media } from "@/test/setup";
 import { renderRoute } from "@/test/render";
 
@@ -35,6 +36,7 @@ const ROUTES: Array<[string, string]> = [
 beforeEach(() => {
   media.matches = false;
   usePlayerStore.setState({ hasTrack: false, playing: false });
+  useUiStore.setState({ sidebarCollapsed: [] });
 });
 
 describe("shell routes", () => {
@@ -117,6 +119,7 @@ describe("sidebar sections", () => {
     await userEvent.click(header);
     expect(header).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("link", { name: strings.nav.albums })).not.toBeInTheDocument();
+    expect(useUiStore.getState().sidebarCollapsed).toEqual(["library"]);
     await userEvent.click(header);
     expect(screen.getByRole("link", { name: strings.nav.albums })).toBeInTheDocument();
   });

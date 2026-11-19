@@ -10,11 +10,12 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { Icon, Tooltip } from "@/components/ui";
 import { strings } from "@/i18n";
 import { cn } from "@/lib/cn";
+import { useUiStore, type SidebarSection } from "@/stores/ui";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
@@ -60,17 +61,20 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
 
 /** Section with a bold muted header; hovering the header reveals a collapse chevron. */
 function Section({
+  id,
   label,
   collapsed,
   children,
   grow = false,
 }: {
+  id: SidebarSection;
   label: string;
   collapsed: boolean;
   children: ReactNode;
   grow?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const open = useUiStore((st) => !st.sidebarCollapsed.includes(id));
+  const toggle = useUiStore((st) => st.toggleSection);
   const bodyId = useId();
 
   if (collapsed) {
@@ -89,7 +93,7 @@ function Section({
           type="button"
           aria-expanded={open}
           aria-controls={bodyId}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => toggle(id)}
           className="group u-tone flex h-6 w-full items-center justify-between rounded-[6px] px-2 text-left text-footnote font-bold text-text-tertiary"
         >
           {label}
@@ -133,18 +137,18 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       <div data-tauri-drag-region className="h-8 w-full shrink-0" />
 
       <div className={cn("flex min-h-0 flex-1 flex-col", collapsed ? "items-center" : "px-2")}>
-        <Section label={strings.nav.listen} collapsed={collapsed}>
+        <Section id="listen" label={strings.nav.listen} collapsed={collapsed}>
           {LISTEN.map((item) => (
             <SidebarLink key={item.to} item={item} collapsed={collapsed} />
           ))}
         </Section>
-        <Section label={strings.nav.library} collapsed={collapsed}>
+        <Section id="library" label={strings.nav.library} collapsed={collapsed}>
           {LIBRARY.map((item) => (
             <SidebarLink key={item.to} item={item} collapsed={collapsed} />
           ))}
         </Section>
         {collapsed ? null : (
-          <Section label={strings.nav.yourPlaylists} collapsed={collapsed} grow>
+          <Section id="playlists" label={strings.nav.yourPlaylists} collapsed={collapsed} grow>
             <p className="px-2 py-1 text-callout text-text-tertiary">{strings.nav.noPlaylists}</p>
           </Section>
         )}

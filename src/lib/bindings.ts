@@ -10,9 +10,33 @@ import type { InvokeOptions } from "@tauri-apps/api/core";
 export const commands = {
 	/**  App version and database schema version. */
 	appInfo: (options?: InvokeOptions) => __TAURI_INVOKE<AppInfo>("app_info", undefined, options),
+	/**  Current settings (defaults for anything never saved). */
+	settingsGet: (options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_get", undefined, options),
+	/**  Saves settings and returns the stored (sanitised) value. */
+	settingsSet: (settings: Settings_Deserialize, options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_set", { settings }, options),
 };
 
 /* Types */
+export type Account = Account_Serialize | Account_Deserialize;
+
+export type AccountStatus = "notConnected" | "connected" | "needsReconnect" | "syncing";
+
+export type Account_Deserialize = {
+	provider: ProviderId,
+	status: AccountStatus,
+	displayName?: string | null,
+	/**  Unix seconds. */
+	lastSyncedAt?: number | null,
+};
+
+export type Account_Serialize = {
+	provider: ProviderId,
+	status: AccountStatus,
+	displayName: string | null,
+	/**  Unix seconds. */
+	lastSyncedAt: number | null,
+};
+
 /**  Error returned by every command. */
 export type AppError = {
 	code: ErrorCode,
@@ -32,3 +56,139 @@ export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type
 retryAfter: number } | { type: "youtubeQuotaExceeded"; 
 /**  Unix seconds when the daily quota resets (midnight Pacific). */
 resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "internal" };
+
+/**  Offset-paged result. */
+export type Page<T> = Page_Serialize<T> | Page_Deserialize<T>;
+
+/**  Offset-paged result. */
+export type Page_Deserialize<T> = {
+	items: T[],
+	total: number,
+	nextOffset?: number | null,
+};
+
+/**  Offset-paged result. */
+export type Page_Serialize<T> = {
+	items: T[],
+	total: number,
+	nextOffset: number | null,
+};
+
+export type Playlist = Playlist_Serialize | Playlist_Deserialize;
+
+export type Playlist_Deserialize = {
+	id: string,
+	/**  `None` = Unison local playlist. */
+	provider?: ProviderId | null,
+	name: string,
+	owner: string,
+	trackCount: number,
+	artwork?: string | null,
+	editable: boolean,
+};
+
+export type Playlist_Serialize = {
+	id: string,
+	/**  `None` = Unison local playlist. */
+	provider: ProviderId | null,
+	name: string,
+	owner: string,
+	trackCount: number,
+	artwork: string | null,
+	editable: boolean,
+};
+
+/**  A music platform. Stored in SQLite as `'spotify'` / `'youtube'`. */
+export type ProviderId = "spotify" | "youtube";
+
+/**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
+export type Settings = Settings_Serialize | Settings_Deserialize;
+
+/**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
+export type Settings_Deserialize = {
+	theme?: Theme,
+	/**  Glass frost 0..=1 (more blur + tint). */
+	glassFrost?: number | null,
+	windowMaterial?: WindowMaterial,
+	/**  Sidebar sections the user collapsed (by section key). */
+	sidebarCollapsed?: string[],
+	/**  Background sync interval in minutes: 15, 30 or 60. */
+	syncIntervalMin?: number,
+	/**  Source to play when a song exists on both platforms; `None` = Spotify if connected. */
+	preferredSource?: ProviderId | null,
+};
+
+/**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
+export type Settings_Serialize = {
+	theme: Theme,
+	/**  Glass frost 0..=1 (more blur + tint). */
+	glassFrost: number | null,
+	windowMaterial: WindowMaterial,
+	/**  Sidebar sections the user collapsed (by section key). */
+	sidebarCollapsed: string[],
+	/**  Background sync interval in minutes: 15, 30 or 60. */
+	syncIntervalMin: number,
+	/**  Source to play when a song exists on both platforms; `None` = Spotify if connected. */
+	preferredSource: ProviderId | null,
+};
+
+export type Signal = {
+	subject: SignalSubject,
+	kind: SignalKind,
+	/**  Unix seconds. */
+	at: number,
+};
+
+/**  Taste signal kinds (spec §8.3). */
+export type SignalKind = "topShort" | "topMedium" | "topLong" | "recent" | "liked" | "play" | "skip" | "replay" | "followed";
+
+/**  A taste signal about a track or an artist. */
+export type SignalSubject = 
+/**  Provider-side track reference (resolved to a unified id on insert). */
+({ track: SourceRef }) & { artist?: never } | 
+/**  Artist name. */
+({ artist: string }) & { track?: never };
+
+/**  Where a unified track can be played. */
+export type SourceRef = {
+	provider: ProviderId,
+	/**  Spotify track id or YouTube video id. */
+	itemId: string,
+	url: string,
+};
+
+export type Theme = "dark" | "light";
+
+/**  One song, possibly available on several platforms. */
+export type Track = Track_Serialize | Track_Deserialize;
+
+/**  One song, possibly available on several platforms. */
+export type Track_Deserialize = {
+	/**  Unified id (uuid v7) — or a provider-scoped id before matching. */
+	id: string,
+	title: string,
+	artists: string[],
+	album?: string | null,
+	durationMs?: number | null,
+	artwork?: string | null,
+	isrc?: string | null,
+	sources: SourceRef[],
+	available: boolean,
+};
+
+/**  One song, possibly available on several platforms. */
+export type Track_Serialize = {
+	/**  Unified id (uuid v7) — or a provider-scoped id before matching. */
+	id: string,
+	title: string,
+	artists: string[],
+	album: string | null,
+	durationMs: number | null,
+	artwork: string | null,
+	isrc: string | null,
+	sources: SourceRef[],
+	available: boolean,
+};
+
+/**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
+export type WindowMaterial = "mica" | "acrylic" | "off";

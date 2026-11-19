@@ -2,9 +2,10 @@
 
 mod bindings;
 mod commands;
-mod core;
-mod error;
-mod model;
+pub mod core;
+pub mod error;
+pub mod model;
+pub mod providers;
 mod state;
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -14,8 +15,8 @@ use crate::core::window_material::{self, Material};
 use crate::state::{AppState, LogGuard};
 
 /// Builds the main window in code so the backdrop material can depend on the Windows build.
-fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
-    let material = window_material::resolve(Material::requested(), window_material::windows_build());
+fn create_main_window(app: &tauri::App, saved: model::WindowMaterial) -> tauri::Result<()> {
+    let material = window_material::resolve(Material::requested(saved), window_material::windows_build());
 
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Unison")
@@ -35,7 +36,8 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
 }
 
 /// Logging, database and state. Errors here abort startup with a logged reason.
-fn init_core(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+/// Returns the saved window material so the window can be created with it.
+fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::error::Error>> {
     let paths = app.path();
     let guard = core::logging::init(&paths.app_log_dir()?)?;
     app.manage(LogGuard(guard));
@@ -46,8 +48,9 @@ fn init_core(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tracing::error!(error = %e, "database failed to open");
         e
     })?;
+    let settings = tauri::async_runtime::block_on(core::db::settings::load(&pool)).unwrap_or_default();
     app.manage(AppState { db: pool });
-    Ok(())
+    Ok(settings.window_material)
 }
 
 pub fn run() {
@@ -59,6 +62,14 @@ pub fn run() {
     }
 
     let result = tauri::Builder::default()
+        // Must be first: a second launch hands over to the running instance and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         // Restores size/position/maximised for windows created later in setup().
         .plugin(
@@ -69,8 +80,8 @@ pub fn run() {
         .invoke_handler(specta.invoke_handler())
         .setup(move |app| {
             specta.mount_events(app);
-            init_core(app)?;
-            create_main_window(app)?;
+            let material = init_core(app)?;
+            create_main_window(app, material)?;
             Ok(())
         })
         .run(tauri::generate_context!());

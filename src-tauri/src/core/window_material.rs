@@ -32,13 +32,16 @@ impl Material {
         }
     }
 
-    /// Requested material until the Settings page exists (T-71): `UNISON_MATERIAL` env var,
-    /// default Mica.
-    pub fn requested() -> Material {
+    /// Requested material: `UNISON_MATERIAL` env var (dev override) or the saved setting.
+    pub fn requested(saved: crate::model::WindowMaterial) -> Material {
         std::env::var("UNISON_MATERIAL")
             .ok()
             .and_then(|v| Material::parse(&v))
-            .unwrap_or(Material::Mica)
+            .unwrap_or(match saved {
+                crate::model::WindowMaterial::Mica => Material::Mica,
+                crate::model::WindowMaterial::Acrylic => Material::Acrylic,
+                crate::model::WindowMaterial::Off => Material::Off,
+            })
     }
 
     /// Native effect for this material, if any.

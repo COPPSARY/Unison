@@ -13,6 +13,14 @@ Acceptance criteria:
 
 ## Done
 
+- **T-06 — Provider trait, models, settings, single instance** (2026-11-19): §5 models
+  (ProviderId, SourceRef, Track, Playlist, Page, Account, Signal) in bindings; object-safe
+  async `MusicProvider` trait; `Settings` stored per key as JSON with per-field fallback and
+  sanitising; `settings_get/set`; UI hydrates before first paint and saves theme / frost /
+  sidebar sections (debounced); window material read from settings at launch
+  (`UNISON_MATERIAL` still overrides); single-instance focuses the running window (verified).
+  27 Rust + 56 Vitest tests.
+
 - **T-05 — Rust core** (2026-11-19): `AppError` + `ErrorCode` (§9) serialised as a tagged union;
   `tracing` to a daily file (+ stdout in debug) through a redacting writer (Authorization,
   token/code/key params, token JSON); SQLite pool (WAL, FKs, busy timeout) with embedded
