@@ -64,7 +64,14 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         settings.player.output_device.clone(),
         settings.player.volume,
     )?;
-    app.manage(AppState::new(pool, state::http_client()?, Arc::new(Keychain), Arc::new(native)));
+    let youtube = core::playback::youtube_engine::YouTubeEngine::new(Arc::new(app.handle().clone()));
+    app.manage(AppState::new(
+        pool,
+        state::http_client()?,
+        Arc::new(Keychain),
+        Arc::new(native),
+        Arc::new(youtube),
+    ));
     Ok(settings.window_material)
 }
 

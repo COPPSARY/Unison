@@ -44,6 +44,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playlists::playlist_open_external,
             commands::youtube::youtube_test_playback,
             commands::youtube::youtube_test_report,
+            commands::youtube::youtube_player_report,
+            commands::youtube::youtube_host_ready,
             commands::player::spotify_capabilities,
             commands::player::player_outputs,
             commands::player::player_set_output,

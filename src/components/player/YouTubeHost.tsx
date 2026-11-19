@@ -10,6 +10,10 @@ import {
 
 export type YouTubeHostProps = {
   videoId: string;
+  /** Start position (ms). */
+  startMs?: number;
+  /** Receives the API player once it is attached (direct embed only). */
+  onPlayer?: (player: YTPlayer | null) => void;
   /** Owner-hosted relay page (Settings → Advanced); null = direct embed. */
   relay?: string | null;
   onReady?: () => void;
@@ -24,14 +28,24 @@ export type YouTubeHostProps = {
  * `origin`, `strict-origin-when-cross-origin` referrer — and the IFrame API attaches to it.
  * Never rendered smaller than 200×200 px or hidden while playing.
  */
-export function YouTubeHost({ videoId, relay, onReady, onStateChange, onError, className, title }: YouTubeHostProps) {
+export function YouTubeHost({
+  videoId,
+  startMs = 0,
+  onPlayer,
+  relay,
+  onReady,
+  onStateChange,
+  onError,
+  className,
+  title,
+}: YouTubeHostProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
-  const handlers = useRef({ onReady, onStateChange, onError });
-  handlers.current = { onReady, onStateChange, onError };
+  const handlers = useRef({ onReady, onStateChange, onError, onPlayer });
+  handlers.current = { onReady, onStateChange, onError, onPlayer };
 
   const origin = window.location.origin;
-  const src = relay ? relayUrl(relay, videoId, origin) : embedUrl(videoId, origin);
+  const src = relay ? relayUrl(relay, videoId, origin) : embedUrl(videoId, origin, true, startMs / 1000);
 
   // Direct embed: attach the official API to our iframe.
   useEffect(() => {
@@ -44,7 +58,10 @@ export function YouTubeHost({ videoId, relay, onReady, onStateChange, onError, c
         if (disposed) return;
         playerRef.current = new YT.Player(frame, {
           events: {
-            onReady: () => handlers.current.onReady?.(),
+            onReady: (e) => {
+              handlers.current.onPlayer?.(e.target);
+              handlers.current.onReady?.();
+            },
             onStateChange: (e) => handlers.current.onStateChange?.(e.data),
             onError: (e) => handlers.current.onError?.(e.data),
           },
@@ -54,6 +71,7 @@ export function YouTubeHost({ videoId, relay, onReady, onStateChange, onError, c
     return () => {
       disposed = true;
       playerRef.current = null;
+      handlers.current.onPlayer?.(null);
     };
   }, [relay, src]);
 

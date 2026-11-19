@@ -35,6 +35,10 @@ pub enum YoutubeCommand {
         position_ms: u32,
     },
     Stop,
+    /// 0–100.
+    Volume {
+        volume: u8,
+    },
     /// Play the test video and report through `youtube_test_report`.
     Test {
         #[serde(rename = "videoId")]

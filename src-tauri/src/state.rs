@@ -19,6 +19,8 @@ pub struct AppState {
     pub spotify: Arc<SpotifyClient>,
     /// Local files + HTTP streams (UP-05/06).
     pub native: Arc<crate::core::playback::native::NativeEngine>,
+    /// Official IFrame player in the webview (UP-07).
+    pub youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     pub sync: SyncManager,
     /// Spotify Premium answer, cached 1 h (UP-04).
     pub spotify_premium: crate::providers::spotify::player::PremiumCache,
@@ -36,6 +38,7 @@ impl AppState {
         http: reqwest::Client,
         secrets: Arc<dyn SecretStore>,
         native: Arc<crate::core::playback::native::NativeEngine>,
+        youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     ) -> Self {
         let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
         Self {
@@ -44,6 +47,7 @@ impl AppState {
             secrets,
             spotify,
             native,
+            youtube,
             sync: SyncManager::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),

@@ -60,6 +60,15 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-07 — YouTubeEngine bridge** (2026-11-19): Rust `YouTubeEngine` (Engine, kind youtube) sends
+  load/play/pause/seek/volume/stop as `player://youtube-command`; `youtube_player_report` feeds
+  playing/paused/ended/error + position/duration back; `youtube_host_ready` gates can_play so
+  YouTube never plays without the visible player. `YouTubeDock` (always mounted) shows the
+  official player in a glass card (≥ 200×200), runs the commands on the IFrame API, reports
+  state changes and the position every second. Tests: Rust engine with a recording sink,
+  Vitest dock (commands → IFrame calls, events → reports, Settings test ignored). Live use
+  comes with the resolver (UP-09) — the library has no YouTube items while YouTube sync is parked.
+
 - **UP-06 — NativeEngine HTTP streaming** (2026-11-19): `HttpSource` (Read + Seek) with a download
   thread using Range requests into memory (never disk), restart on far seeks, 15 s stall timeout,
   error flag on dropped connections; NativeEngine plays http(s) URLs (Audius kind) and reports

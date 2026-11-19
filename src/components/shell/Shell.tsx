@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router";
 import { PlayerBar } from "@/components/player/PlayerBar";
+import { YouTubeDock } from "@/components/player/YouTubeDock";
 import { cn } from "@/lib/cn";
 import { useSyncEvents } from "@/lib/events";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -44,6 +45,7 @@ export function Shell() {
             <Outlet />
           </ScrollContainerContext.Provider>
         </main>
+        <YouTubeDock />
       </div>
       <PlayerBar />
     </div>

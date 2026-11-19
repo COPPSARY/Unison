@@ -6,3 +6,4 @@ pub mod native;
 pub mod player;
 pub mod queue;
 pub mod youtube;
+pub mod youtube_engine;

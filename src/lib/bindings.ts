@@ -57,6 +57,10 @@ export const commands = {
 	youtubeTestPlayback: (options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_test_playback", undefined, options),
 	/**  The UI's answer to a test: `ok` when the player reached PLAYING, else the onError code. */
 	youtubeTestReport: (ok: boolean, code: number | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_test_report", { ok, code }, options),
+	/**  State report from the webview IFrame player (spec §5 youtube_player_report). */
+	youtubePlayerReport: (playerState: YoutubePlayerState, positionMs: number, durationMs: number | null, errorCode: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_player_report", { playerState, positionMs, durationMs, errorCode }, options),
+	/**  The YouTubeDock mounted or unmounted (YouTube can only play while it is mounted). */
+	youtubeHostReady: (ready: boolean, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_host_ready", { ready }, options),
 	/**  Spotify Premium (cached 1 h when known) and the current Spotify Connect devices. */
 	spotifyCapabilities: (refresh: boolean, options?: InvokeOptions) => __TAURI_INVOKE<SpotifyCapabilities_Serialize>("spotify_capabilities", { refresh }, options),
 	/**  Audio output devices for the NativeEngine (Settings → Playback → Output). */
@@ -603,8 +607,13 @@ export type WindowMaterial = "mica" | "acrylic" | "off";
 
 /**  Commands for the webview's YouTubeHost (spec §5 `player://youtube-command`). */
 export type YoutubeCommand = { type: "load"; videoId: string; startMs: number } | { type: "play" } | { type: "pause" } | { type: "seek"; positionMs: number } | { type: "stop" } | 
+/**  0–100. */
+{ type: "volume"; volume: number } | 
 /**  Play the test video and report through `youtube_test_report`. */
 { type: "test"; videoId: string };
+
+/**  IFrame player states as reported by the UI (IFrame API -1, 0, 1, 2, 3, 5). */
+export type YoutubePlayerState = "unstarted" | "ended" | "playing" | "paused" | "buffering" | "cued";
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

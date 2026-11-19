@@ -42,7 +42,8 @@
     "devices": "Devices",
     "expand": "Expand",
     "seek": "Seek",
-    "playerBar": "Player"
+    "playerBar": "Player",
+    "youtubeVideo": "YouTube video"
   },
   "track": {
     "addToPlaylist": "Add to playlist",

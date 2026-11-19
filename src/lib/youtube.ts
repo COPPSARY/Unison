@@ -69,7 +69,7 @@ export function loadIframeApi(): Promise<YTNamespace> {
  * Embed URL per the addendum's fix: nocookie host, JS API on, explicit origin.
  * `origin` must be the app's own origin (https://tauri.localhost in production).
  */
-export function embedUrl(videoId: string, origin: string, autoplay = true): string {
+export function embedUrl(videoId: string, origin: string, autoplay = true, startSeconds = 0): string {
   const params = new URLSearchParams({
     enablejsapi: "1",
     origin,
@@ -77,6 +77,7 @@ export function embedUrl(videoId: string, origin: string, autoplay = true): stri
     rel: "0",
     autoplay: autoplay ? "1" : "0",
   });
+  if (startSeconds > 0) params.set("start", String(Math.floor(startSeconds)));
   return `${EMBED_HOST}/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
 }
 
@@ -96,4 +97,22 @@ export type RelayMessage =
 
 export function isRelayMessage(data: unknown): data is RelayMessage {
   return typeof data === "object" && data !== null && (data as { unison?: unknown }).unison === "yt";
+}
+
+/** IFrame API state number → the name Rust expects in youtube_player_report. */
+export function stateName(state: number): "unstarted" | "ended" | "playing" | "paused" | "buffering" | "cued" {
+  switch (state) {
+    case YT_STATE.ended:
+      return "ended";
+    case YT_STATE.playing:
+      return "playing";
+    case YT_STATE.paused:
+      return "paused";
+    case YT_STATE.buffering:
+      return "buffering";
+    case YT_STATE.cued:
+      return "cued";
+    default:
+      return "unstarted";
+  }
 }
