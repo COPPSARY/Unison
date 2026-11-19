@@ -1,5 +1,7 @@
 //! tauri-specta builder: the single list of commands, events and extra types exposed to React.
 //! `src/lib/bindings.ts` is regenerated from this on every debug run and by `cargo test`.
+// Export helpers run only in debug builds and tests.
+#![cfg_attr(not(debug_assertions), allow(dead_code))]
 
 use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, collect_events, Builder};
