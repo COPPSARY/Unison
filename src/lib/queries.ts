@@ -1,5 +1,12 @@
-import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands, type ProviderId } from "@/lib/bindings";
+import {
+  QueryClient,
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { commands, type LibrarySort, type ProviderId } from "@/lib/bindings";
 import { isTauri } from "@/lib/window";
 
 /** One client for the app. Commands read the local DB, so data stays fresh until invalidated. */
@@ -80,5 +87,62 @@ export function useSyncNow() {
   return useMutation({
     mutationFn: (provider: ProviderId | null) => commands.syncNow(provider),
     onSuccess: () => void qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+  });
+}
+
+// ---------------------------------------------------------------- Library views
+
+/** Rows per liked-songs request; the table asks for more as you scroll. */
+export const LIKED_PAGE = 300;
+
+export type LibraryArgs = { provider: ProviderId | null; sort: LibrarySort; query: string };
+
+const filterArg = (q: string) => (q ? q : null);
+
+export function useLikedTracks({ provider, sort, query }: LibraryArgs) {
+  return useInfiniteQuery({
+    queryKey: ["liked", provider, sort, query],
+    queryFn: ({ pageParam }) =>
+      commands.libraryLiked(provider, sort, filterArg(query), pageParam, LIKED_PAGE),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
+export function useLikedStats(provider: ProviderId | null, query: string) {
+  return useQuery({
+    queryKey: ["likedStats", provider, query],
+    queryFn: () => commands.libraryLikedStats(provider, filterArg(query)),
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
+export function useAlbums({ provider, sort, query }: LibraryArgs) {
+  return useQuery({
+    queryKey: ["albums", provider, sort, query],
+    queryFn: () => commands.libraryAlbums(provider, sort, filterArg(query)),
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
+export function useArtists({ provider, sort, query }: LibraryArgs) {
+  return useQuery({
+    queryKey: ["artists", provider, sort, query],
+    queryFn: () => commands.libraryArtists(provider, sort, filterArg(query)),
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
+export function usePlaylists({ provider, sort, query }: LibraryArgs) {
+  return useQuery({
+    queryKey: ["playlists", provider, sort, query],
+    queryFn: () => commands.playlistsList(provider, sort, filterArg(query)),
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
   });
 }

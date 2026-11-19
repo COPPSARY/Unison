@@ -4,6 +4,7 @@ import { PlayerBar } from "@/components/player/PlayerBar";
 import { cn } from "@/lib/cn";
 import { useSyncEvents } from "@/lib/events";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { ScrollContainerContext } from "./ScrollContainer";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 import { useShortcuts } from "./useShortcuts";
@@ -33,10 +34,15 @@ export function Shell() {
         <TitleBar scrolled={scrolled} />
         <main
           ref={scrollRef}
-          onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 4)}
-          className="h-full overflow-y-auto pt-10 pb-[96px]"
+          onScroll={(e) => {
+            const next = e.currentTarget.scrollTop > 4;
+            if (next !== scrolled) setScrolled(next);
+          }}
+          className="relative h-full overflow-y-auto pt-10 pb-[96px]"
         >
-          <Outlet />
+          <ScrollContainerContext.Provider value={scrollRef}>
+            <Outlet />
+          </ScrollContainerContext.Provider>
         </main>
       </div>
       <PlayerBar />

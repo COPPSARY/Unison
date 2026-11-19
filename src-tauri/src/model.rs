@@ -62,6 +62,8 @@ pub struct Track {
     pub isrc: Option<String>,
     pub sources: Vec<SourceRef>,
     pub available: bool,
+    /// When it was liked/added (library and playlist views), Unix seconds.
+    pub added_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -84,6 +86,22 @@ pub struct Page<T> {
     pub items: Vec<T>,
     pub total: u32,
     pub next_offset: Option<u32>,
+}
+
+/// Concrete page of tracks for commands (tauri-specta rc.29 exports generic return types with an
+/// unbound `T`, so commands return this instead of `Page<Track>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackPage {
+    pub items: Vec<Track>,
+    pub total: u32,
+    pub next_offset: Option<u32>,
+}
+
+impl From<Page<Track>> for TrackPage {
+    fn from(p: Page<Track>) -> Self {
+        Self { items: p.items, total: p.total, next_offset: p.next_offset }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -137,6 +155,48 @@ pub struct Signal {
     pub kind: SignalKind,
     /// Unix seconds.
     pub at: i64,
+}
+
+// ---------------------------------------------------------------- Library views
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Album {
+    pub id: String,
+    pub provider: ProviderId,
+    pub item_id: String,
+    pub name: String,
+    pub artists: Vec<String>,
+    pub artwork: Option<String>,
+    pub release_date: Option<String>,
+    pub added_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Artist {
+    pub id: String,
+    pub provider: ProviderId,
+    pub item_id: String,
+    pub name: String,
+    pub artwork: Option<String>,
+}
+
+/// Sort orders for list and grid views.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibrarySort {
+    DateAdded,
+    Title,
+    Artist,
+}
+
+/// Count and total duration for a list header.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ListStats {
+    pub count: u32,
+    pub duration_ms: f64,
 }
 
 // ---------------------------------------------------------------- Settings

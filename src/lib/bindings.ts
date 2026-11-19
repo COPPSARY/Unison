@@ -36,6 +36,11 @@ export const commands = {
 	syncNow: (provider: ProviderId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("sync_now", { provider }, options),
 	/**  Cancels a running sync for `provider`. */
 	syncCancel: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<void>("sync_cancel", { provider }, options),
+	libraryLiked: (source: ProviderId | null, sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_liked", { source, sort, filter, offset, limit }, options),
+	libraryLikedStats: (source: ProviderId | null, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_liked_stats", { source, filter }, options),
+	libraryAlbums: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Album_Serialize[]>("library_albums", { source, sort, filter }, options),
+	libraryArtists: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Artist_Serialize[]>("library_artists", { source, sort, filter }, options),
+	playlistsList: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Playlist_Serialize[]>("playlists_list", { source, sort, filter }, options),
 };
 
 /** Events */
@@ -65,6 +70,30 @@ export type Account_Serialize = {
 	lastSyncedAt: number | null,
 };
 
+export type Album = Album_Serialize | Album_Deserialize;
+
+export type Album_Deserialize = {
+	id: string,
+	provider: ProviderId,
+	itemId: string,
+	name: string,
+	artists: string[],
+	artwork?: string | null,
+	releaseDate?: string | null,
+	addedAt?: number | null,
+};
+
+export type Album_Serialize = {
+	id: string,
+	provider: ProviderId,
+	itemId: string,
+	name: string,
+	artists: string[],
+	artwork: string | null,
+	releaseDate: string | null,
+	addedAt: number | null,
+};
+
 /**  Error returned by every command. */
 export type AppError = {
 	code: ErrorCode,
@@ -78,6 +107,24 @@ export type AppInfo = {
 	schemaVersion: number,
 };
 
+export type Artist = Artist_Serialize | Artist_Deserialize;
+
+export type Artist_Deserialize = {
+	id: string,
+	provider: ProviderId,
+	itemId: string,
+	name: string,
+	artwork?: string | null,
+};
+
+export type Artist_Serialize = {
+	id: string,
+	provider: ProviderId,
+	itemId: string,
+	name: string,
+	artwork: string | null,
+};
+
 /**  Machine-readable error kind, serialised as `{ "type": "rateLimited", "retryAfter": 30 }`. */
 export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type: "authTimeout" } | { type: "needsReconnect" } | { type: "invalidClientId" } | { type: "redirectUriMismatch" } | { type: "spotifyPremiumRequired" } | 
 /**  Spotify Development Mode: the signed-in user is not listed under User Management. */
@@ -87,21 +134,13 @@ retryAfter: number } | { type: "youtubeQuotaExceeded";
 /**  Unix seconds when the daily quota resets (midnight Pacific). */
 resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "internal" };
 
-/**  Offset-paged result. */
-export type Page<T> = Page_Serialize<T> | Page_Deserialize<T>;
+/**  Sort orders for list and grid views. */
+export type LibrarySort = "dateAdded" | "title" | "artist";
 
-/**  Offset-paged result. */
-export type Page_Deserialize<T> = {
-	items: T[],
-	total: number,
-	nextOffset?: number | null,
-};
-
-/**  Offset-paged result. */
-export type Page_Serialize<T> = {
-	items: T[],
-	total: number,
-	nextOffset: number | null,
+/**  Count and total duration for a list header. */
+export type ListStats = {
+	count: number,
+	durationMs: number | null,
 };
 
 export type Playlist = Playlist_Serialize | Playlist_Deserialize;
@@ -229,6 +268,32 @@ export type Theme = "dark" | "light";
 /**  One song, possibly available on several platforms. */
 export type Track = Track_Serialize | Track_Deserialize;
 
+/**
+ *  Concrete page of tracks for commands (tauri-specta rc.29 exports generic return types with an
+ *  unbound `T`, so commands return this instead of `Page<Track>`).
+ */
+export type TrackPage = TrackPage_Serialize | TrackPage_Deserialize;
+
+/**
+ *  Concrete page of tracks for commands (tauri-specta rc.29 exports generic return types with an
+ *  unbound `T`, so commands return this instead of `Page<Track>`).
+ */
+export type TrackPage_Deserialize = {
+	items: Track_Deserialize[],
+	total: number,
+	nextOffset?: number | null,
+};
+
+/**
+ *  Concrete page of tracks for commands (tauri-specta rc.29 exports generic return types with an
+ *  unbound `T`, so commands return this instead of `Page<Track>`).
+ */
+export type TrackPage_Serialize = {
+	items: Track_Serialize[],
+	total: number,
+	nextOffset: number | null,
+};
+
 /**  One song, possibly available on several platforms. */
 export type Track_Deserialize = {
 	/**  Unified id (uuid v7) — or a provider-scoped id before matching. */
@@ -241,6 +306,8 @@ export type Track_Deserialize = {
 	isrc?: string | null,
 	sources: SourceRef[],
 	available: boolean,
+	/**  When it was liked/added (library and playlist views), Unix seconds. */
+	addedAt?: number | null,
 };
 
 /**  One song, possibly available on several platforms. */
@@ -255,6 +322,8 @@ export type Track_Serialize = {
 	isrc: string | null,
 	sources: SourceRef[],
 	available: boolean,
+	/**  When it was liked/added (library and playlist views), Unix seconds. */
+	addedAt: number | null,
 };
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */

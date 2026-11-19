@@ -15,7 +15,8 @@ import { NavLink } from "react-router";
 import { Icon, Tooltip } from "@/components/ui";
 import { format, strings } from "@/i18n";
 import { cn } from "@/lib/cn";
-import { useAccounts } from "@/lib/queries";
+import { useAccounts, usePlaylists } from "@/lib/queries";
+import { SourceMark } from "@/components/track/SourceMark";
 import { useSyncStore } from "@/stores/sync";
 import { useUiStore, type SidebarSection } from "@/stores/ui";
 
@@ -132,6 +133,33 @@ function syncLine(st: { stage: keyof typeof strings.sync.stage; done: number; to
 /** Footer line: connected accounts, or a muted "No account connected". */
 const count = new Intl.NumberFormat();
 
+/** Every playlist, both sources mixed, with a small monochrome source mark (spec §3 Sidebar). */
+function PlaylistLinks() {
+  const playlists = usePlaylists({ provider: null, sort: "title", query: "" });
+  if (!playlists.data?.length) {
+    return <p className="px-2 py-1 text-callout text-text-tertiary">{strings.nav.noPlaylists}</p>;
+  }
+  return (
+    <>
+      {playlists.data.map((p) => (
+        <NavLink
+          key={p.id}
+          to={`/playlist/${p.id}`}
+          className={({ isActive }) =>
+            cn(
+              "u-tone flex h-7 shrink-0 items-center gap-2 rounded-[8px] px-2 text-body text-text",
+              isActive ? "bg-fill-secondary" : "hover:bg-fill-quaternary",
+            )
+          }
+        >
+          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+          {p.provider ? <SourceMark provider={p.provider} /> : null}
+        </NavLink>
+      ))}
+    </>
+  );
+}
+
 function AccountStatusLine() {
   const accounts = useAccounts();
   const running = useSyncStore((st) => st.running);
@@ -198,7 +226,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         </Section>
         {collapsed ? null : (
           <Section id="playlists" label={strings.nav.yourPlaylists} collapsed={collapsed} grow>
-            <p className="px-2 py-1 text-callout text-text-tertiary">{strings.nav.noPlaylists}</p>
+            <PlaylistLinks />
           </Section>
         )}
       </div>

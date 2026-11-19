@@ -270,5 +270,43 @@
     "lastSynced": "Synced {when}",
     "never": "Not synced yet",
     "justNow": "just now"
+  },
+  "library": {
+    "songCount": "{count} songs",
+    "songCountOne": "1 song",
+    "albumCount": "{count} albums",
+    "artistCount": "{count} artists",
+    "playlistCount": "{count} playlists",
+    "durationHours": "{h} hr {m} min",
+    "durationMinutes": "{m} min",
+    "col": {
+      "number": "#",
+      "title": "Title",
+      "album": "Album",
+      "source": "Source",
+      "dateAdded": "Date added",
+      "duration": "Duration"
+    },
+    "unavailable": "Not available: deleted, private, region-blocked or a local file",
+    "noResults": "No tracks match “{query}”",
+    "noResultsGrid": "Nothing matches “{query}”",
+    "errorLoad": "Couldn't load your library",
+    "retry": "Retry",
+    "playSoon": "Playback arrives in an upcoming update",
+    "play": "Play",
+    "shuffle": "Shuffle",
+    "more": "More",
+    "filterPlaceholder": "Filter",
+    "by": "by {owner}",
+    "tracksInPlaylist": "{count} songs",
+    "playTrack": "Play {title}",
+    "table": "Songs",
+    "grid": "Library items",
+    "unisonPlaylist": "Unison",
+    "sortDateAdded": "Recently added",
+    "sortTitle": "Title",
+    "sortArtist": "Artist",
+    "sortOwner": "Owner",
+    "sortName": "Name"
   }
 }

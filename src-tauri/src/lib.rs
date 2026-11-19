@@ -46,7 +46,11 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
     app.manage(LogGuard(guard));
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "starting unison");
 
-    let db_path = paths.app_data_dir()?.join(core::db::DB_FILE);
+    // UNISON_DB points at another database (e.g. the `pnpm seed` demo DB) for UI checks.
+    let db_path = match std::env::var_os("UNISON_DB") {
+        Some(custom) => std::path::PathBuf::from(custom),
+        None => paths.app_data_dir()?.join(core::db::DB_FILE),
+    };
     let pool = tauri::async_runtime::block_on(core::db::open(&db_path)).map_err(|e| {
         tracing::error!(error = %e, "database failed to open");
         e

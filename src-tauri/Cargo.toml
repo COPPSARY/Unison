@@ -5,6 +5,7 @@ description = "All your music, playing as one."
 edition = "2021"
 rust-version = "1.85"
 publish = false
+default-run = "unison"
 
 [lib]
 name = "unison_lib"

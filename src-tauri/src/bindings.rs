@@ -7,7 +7,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use crate::commands;
 use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
-use crate::model::{Account, Page, Playlist, Signal, Track};
+use crate::model::{Account, Playlist, Signal, Track};
 
 /// Path of the generated file, relative to `src-tauri/`.
 pub const BINDINGS_PATH: &str = "../src/lib/bindings.ts";
@@ -29,11 +29,16 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::accounts::account_cancel_connect,
             commands::sync::sync_now,
             commands::sync::sync_cancel,
+            commands::library::library_liked,
+            commands::library::library_liked_stats,
+            commands::library::library_albums,
+            commands::library::library_artists,
+            commands::library::playlists_list,
         ])
         .events(collect_events![SyncProgress, SyncFinished])
         .typ::<AppError>()
         .typ::<Account>()
-        .typ::<Page<Track>>()
+        .typ::<Track>()
         .typ::<Playlist>()
         .typ::<Signal>()
         // Unix-second timestamps fit comfortably in a JS number.
@@ -61,5 +66,7 @@ mod tests {
         assert!(ts.contains("AppError"), "{ts}");
         assert!(ts.contains("settingsSet"), "{ts}");
         assert!(ts.contains("export type Track"), "{ts}");
+        // Guard against tauri-specta emitting unbound generics in command signatures.
+        assert!(!ts.contains(r#"<T>>(""#), "unbound generic in bindings");
     }
 }

@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod library;
 pub mod settings;
+pub mod views;
 
 use std::path::Path;
 use std::str::FromStr;

@@ -11,6 +11,23 @@ Acceptance criteria:
 - Green on all three OSes.
 - Status: pushed (f25acf7); waiting for the owner to confirm the first run.
 
+### T-14 — Library pages
+Acceptance criteria:
+- Commands (local DB only): `library_liked` (source, sort, filter, offset, limit → Page<Track>),
+  `library_liked_stats` (count + total duration), `library_albums`, `library_artists`,
+  `playlists_list` (source + sort).
+- Liked songs: header (2×2 cover mosaic, title, count + total duration, Play / Shuffle / menu),
+  toolbar (source segmented, text filter, sort select), virtualised table (# · Title with 40 px
+  cover + artist · Album · Source · Date added · Duration, 56 px rows, sticky header, hover play
+  icon, unavailable rows disabled with reason tooltip), incremental loading.
+- Albums / Artists / Playlists: 180 px cover grids (artists circular), same toolbar.
+- Every view: loading skeleton, empty, no results (+ Clear filter), error (+ Retry).
+- `pnpm seed` builds a demo DB (1,200 tracks incl. long/Khmer titles, unavailable items, and a
+  10,000-song liked list) that the app opens with `UNISON_DB`.
+- Rust query tests; Vitest tests for each state; all checks green.
+- Status (2026-11-19): built and committed; Liked/Albums/Artists/Playlists + sidebar playlists
+  read the real DB. Waiting for the owner to check 60 fps scrolling on the 10k demo DB.
+
 ## Done
 
 - **T-13 — Spotify sync** (2026-11-19): full sync profile → liked → playlists (metadata, Feb 2026
