@@ -58,7 +58,7 @@ v1.0 is done when every "In" row works for a tester who connects their own Spoti
 | Playlists | Add/remove tracks on Spotify playlists the user owns | In | R |
 | Playlists | Copy a playlist Spotify → YouTube or back | Out (v1.1) | — |
 | Search | Ctrl+K search across local library; then Spotify + YouTube catalog | In | M |
-| Home | Quick picks, Jump back in, Because you like {artist}, Rediscover, Trending music | In | M |
+| Home | Quick picks, Jump back in, Because you like {artist}, Your top (4 weeks / 6 months / all time), Rediscover, Trending music | In | M |
 | Playback | Spotify via Connect (device picker, play/pause/seek/next/volume) | In | M |
 | Playback | YouTube via official IFrame player (mini-player + expanded video view) | In | M |
 | Playback | Unified queue mixing Spotify and YouTube items, auto-advance | In | B |
@@ -87,7 +87,7 @@ Direction: Apple-inspired glass, dark-first (see `docs/decisions/0002-apple-insp
 
 ### Home
 
-- Rows in this order: Quick picks (4-column grid of compact track rows, 20 items), Jump back in (cover grid, 6 across), Because you like {artist} (2–3 rows), Rediscover, Trending music.
+- Rows in this order: Quick picks (4-column grid of compact track rows, 20 items), Jump back in (cover grid, 6 across), Because you like {artist} (2–3 rows), Your top (artists as circular tiles + tracks, with a segmented 4 weeks / 6 months / all time switch; hidden until a Spotify sync has top items), Rediscover, Trending music.
 - Row title only, no subtitles. "Show all" text link on the right.
 - Hovering a cover reveals a play button on the art (meaningful reveal); the card itself doesn't move.
 - **States:** first run with nothing connected → a single panel: "Connect a music account to fill Home" with two buttons (Connect Spotify, Connect YouTube). Syncing → skeleton rows shaped like the content. Too little data (< 20 signals) → hide taste rows, show Trending + a line "Picks improve as you listen".
@@ -420,6 +420,7 @@ Artist score = Σ (weight × decay). Weights: top\_short 5, top\_medium 3, top\_
 | Quick picks | 12 from top tracks by score (exclude played in last 24 h) + 5 from Last.fm `track.getSimilar` of top-5 tracks + 3 rediscoveries; interleave so no artist appears twice in a row; reshuffle each app launch | 20 |
 | Jump back in | Distinct albums/playlists from last 50 plays + Spotify recently played | 12 |
 | Because you like {artist} | For each of top 3 artists: Last.fm similar artists (exclude ones already in top 50) → their top tracks; resolve playable | 3 rows × 10 |
+| Your top | Spotify top artists and tracks for the selected range (signals `top_short` / `top_medium` / `top_long`, order as returned) | 10 artists + 10 tracks |
 | Rediscover | Liked > 90 days ago, not played in 90 days, score-weighted random | 15 |
 | Trending music | YouTube chart for region (from Windows locale, fallback US) | 20 |
 
@@ -537,7 +538,7 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 | T-50 | Signals ingestion (top, recent, likes, in-app play/skip/replay) | T-43 | Signals table fills; decay test passes |
 | T-51 | Last.fm client + cache | H7 | Fixture tests; 7-day cache |
 | T-52 | Candidate generation + resolver + ranking per section 8.4 | T-50, T-51 | Deterministic test with seeded data produces expected rows |
-| T-53 | Home page with all rows and states, 1 h feed cache, rebuild after sync | T-52 | First-run, low-data and full states correct |
+| T-53 | Home page with all rows (incl. Your top with range switch) and states, 1 h feed cache, rebuild after sync | T-52 | First-run, low-data and full states correct; Your top switches ranges |
 
 ### Phase 6 — Beta
 
