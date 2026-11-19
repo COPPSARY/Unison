@@ -14,6 +14,7 @@ use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Source};
 use tokio::sync::oneshot;
 
 use super::engine::{Engine, EngineState, PlaySource, UnavailableReason};
+use super::http_source::{HttpSource, StreamHandle};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::SourceKind;
 
@@ -91,8 +92,19 @@ fn open_sink(device: Option<&str>) -> AppResult<MixerDeviceSink> {
 
 type Reply<T> = oneshot::Sender<AppResult<T>>;
 
+/// What is loaded, so an output switch can reopen it at the same position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Loaded {
+    File(PathBuf),
+    Url(String),
+}
+
+fn is_stream_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
 enum Cmd {
-    Load { path: PathBuf, start_ms: u32, reply: Reply<()> },
+    Load { source: Loaded, start_ms: u32, reply: Reply<()> },
     Play,
     Pause,
     Stop,
@@ -108,8 +120,11 @@ struct AudioThread {
     sink: Option<MixerDeviceSink>,
     player: Option<rodio::Player>,
     device: Option<String>,
-    path: Option<PathBuf>,
+    loaded: Option<Loaded>,
     duration: Option<Duration>,
+    /// Lazily built blocking HTTP client (this thread is not async).
+    http: Option<reqwest::blocking::Client>,
+    stream: Option<StreamHandle>,
     volume: u8,
     gain_db: Option<f32>,
 }
@@ -128,15 +143,53 @@ impl AudioThread {
         }
     }
 
-    fn load(&mut self, path: PathBuf, start_ms: u32, paused: bool) -> AppResult<()> {
-        let (decoder, duration) = open_decoder(&path)?;
+    fn http(&mut self) -> AppResult<reqwest::blocking::Client> {
+        if self.http.is_none() {
+            let client = reqwest::blocking::Client::builder()
+                .user_agent(concat!("Unison/", env!("CARGO_PKG_VERSION")))
+                .connect_timeout(Duration::from_secs(10))
+                .build()
+                .map_err(|e| AppError::internal(format!("http client: {e}")))?;
+            self.http = Some(client);
+        }
+        self.http.clone().ok_or_else(|| AppError::internal("http client missing"))
+    }
+
+    fn load(&mut self, source: Loaded, start_ms: u32, paused: bool) -> AppResult<()> {
         self.ensure_sink()?;
         if let Some(old) = self.player.take() {
             old.stop();
         }
+        self.stream = None;
+        let client = match &source {
+            Loaded::Url(_) => Some(self.http()?),
+            Loaded::File(_) => None,
+        };
         let sink = self.sink.as_ref().ok_or_else(|| AppError::internal("no audio output"))?;
         let player = rodio::Player::connect_new(sink.mixer());
-        player.append(decoder);
+        let duration = match (&source, client) {
+            (Loaded::File(path), _) => {
+                let (decoder, duration) = open_decoder(path)?;
+                player.append(decoder);
+                duration
+            }
+            (Loaded::Url(url), Some(client)) => {
+                let (stream, handle) = HttpSource::open(client, url)
+                    .map_err(|e| AppError::new(ErrorCode::AudiusUnavailable, format!("stream: {e}")))?;
+                let len = stream.len();
+                let hint = stream.hint.clone();
+                let mut builder = Decoder::builder().with_data(stream).with_byte_len(len).with_seekable(true);
+                if let Some(hint) = hint.as_deref() {
+                    builder = builder.with_hint(hint);
+                }
+                let decoder = builder.build().map_err(decoder_error)?;
+                let duration = decoder.total_duration();
+                player.append(decoder);
+                self.stream = Some(handle);
+                duration
+            }
+            (Loaded::Url(_), None) => return Err(AppError::internal("http client missing")),
+        };
         if start_ms > 0 {
             let _ = player.try_seek(Duration::from_millis(u64::from(start_ms)));
         }
@@ -146,7 +199,7 @@ impl AudioThread {
             player.play();
         }
         self.player = Some(player);
-        self.path = Some(path);
+        self.loaded = Some(source);
         self.duration = duration;
         self.apply_volume();
         Ok(())
@@ -163,6 +216,7 @@ impl AudioThread {
                     duration_ms: self.duration.and_then(|d| u32::try_from(d.as_millis()).ok()),
                     playing: !ended && !p.is_paused(),
                     ended,
+                    failed: self.stream.as_ref().is_some_and(|s| s.error().is_some()),
                 }
             }
         }
@@ -177,10 +231,10 @@ impl AudioThread {
         }
         self.sink = Some(new_sink);
         self.device = device;
-        if let (Some(path), Some((pos, paused, ended))) = (self.path.clone(), resume) {
+        if let (Some(source), Some((pos, paused, ended))) = (self.loaded.clone(), resume) {
             if !ended {
                 let ms = u32::try_from(pos.as_millis()).unwrap_or(0);
-                self.load(path, ms, paused)?;
+                self.load(source, ms, paused)?;
             }
         }
         Ok(())
@@ -189,8 +243,8 @@ impl AudioThread {
     fn run(mut self, rx: mpsc::Receiver<Cmd>) {
         while let Ok(cmd) = rx.recv() {
             match cmd {
-                Cmd::Load { path, start_ms, reply } => {
-                    let _ = reply.send(self.load(path, start_ms, false));
+                Cmd::Load { source, start_ms, reply } => {
+                    let _ = reply.send(self.load(source, start_ms, false));
                 }
                 Cmd::Play => {
                     if let Some(p) = &self.player {
@@ -206,7 +260,8 @@ impl AudioThread {
                     if let Some(p) = self.player.take() {
                         p.stop();
                     }
-                    self.path = None;
+                    self.loaded = None;
+                    self.stream = None;
                     self.duration = None;
                 }
                 Cmd::Seek { ms, reply } => {
@@ -250,8 +305,10 @@ impl NativeEngine {
             sink: None,
             player: None,
             device: output_device,
-            path: None,
+            loaded: None,
             duration: None,
+            http: None,
+            stream: None,
             volume,
             gain_db: None,
         };
@@ -278,7 +335,12 @@ impl NativeEngine {
 
     /// Plays a file path directly (used by Test sound and, later, the local resolver).
     pub async fn load_path(&self, path: PathBuf, start_ms: u32) -> AppResult<()> {
-        self.ask(|reply| Cmd::Load { path, start_ms, reply }).await
+        self.ask(|reply| Cmd::Load { source: Loaded::File(path), start_ms, reply }).await
+    }
+
+    /// Streams an HTTP(S) audio URL (Audius) with Range seeking.
+    pub async fn load_url(&self, url: String, start_ms: u32) -> AppResult<()> {
+        self.ask(|reply| Cmd::Load { source: Loaded::Url(url), start_ms, reply }).await
     }
 
     /// ReplayGain for the next/current item (dB; `None` = none).
@@ -294,20 +356,25 @@ impl NativeEngine {
 
 #[async_trait]
 impl Engine for NativeEngine {
-    fn kind(&self) -> SourceKind {
-        SourceKind::Local
+    fn kinds(&self) -> &'static [SourceKind] {
+        &[SourceKind::Local, SourceKind::Audius]
     }
 
     async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason> {
         match source.kind {
             SourceKind::Local => check_local_file(Path::new(&source.url)),
-            // HTTP streams (Audius) arrive with UP-06.
+            // Reachability is checked by the Audius provider (UP-13); here only the URL shape.
+            SourceKind::Audius if is_stream_url(&source.url) => Ok(()),
             _ => Err(UnavailableReason::NoSource),
         }
     }
 
     async fn load(&self, source: &PlaySource, start_ms: u32) -> AppResult<()> {
-        self.load_path(PathBuf::from(&source.url), start_ms).await
+        if is_stream_url(&source.url) {
+            self.load_url(source.url.clone(), start_ms).await
+        } else {
+            self.load_path(PathBuf::from(&source.url), start_ms).await
+        }
     }
 
     async fn play(&self) -> AppResult<()> {
@@ -399,6 +466,81 @@ mod tests {
         assert!((amplitude(50, None) - 0.25).abs() < 1e-6);
         assert!((amplitude(100, Some(-6.0)) - 0.501).abs() < 0.01);
         assert_eq!(amplitude(100, Some(40.0)), 2.0, "boost clamped");
+    }
+
+    #[test]
+    fn streamed_wav_decodes_with_duration_and_seeks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = tone(dir.path(), "tone.wav", 3.0);
+        let url = crate::core::playback::http_source::tests::serve(std::fs::read(&path).unwrap(), None);
+        let (stream, handle) =
+            HttpSource::open(crate::core::playback::http_source::tests::client(), &url).unwrap();
+        let len = stream.len();
+        let mut decoder = Decoder::builder()
+            .with_data(stream)
+            .with_byte_len(len)
+            .with_seekable(true)
+            .with_hint("wav")
+            .build()
+            .unwrap();
+        let ms = decoder.total_duration().unwrap().as_millis();
+        assert!((2900..=3100).contains(&ms), "duration {ms} ms");
+        decoder.try_seek(Duration::from_secs(2)).unwrap();
+        assert!(decoder.next().is_some());
+        assert!(handle.error().is_none());
+    }
+
+    #[tokio::test]
+    async fn audius_sources_need_a_stream_url() {
+        let engine = NativeEngine::spawn(None, 50).unwrap();
+        let ok = PlaySource { kind: SourceKind::Audius, item_id: "a".into(), url: "https://example.com/stream".into() };
+        let bad = PlaySource { kind: SourceKind::Audius, item_id: "a".into(), url: "C:/x.mp3".into() };
+        assert_eq!(engine.can_play(&ok).await, Ok(()));
+        assert_eq!(engine.can_play(&bad).await, Err(UnavailableReason::NoSource));
+        assert_eq!(engine.kinds(), &[SourceKind::Local, SourceKind::Audius]);
+    }
+
+    /// Streams over HTTP through the real output (silent tone) and seeks.
+    #[tokio::test]
+    #[ignore = "needs an audio output device"]
+    async fn native_engine_streams_and_seeks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = tone(dir.path(), "tone.wav", 4.0);
+        let url = crate::core::playback::http_source::tests::serve(std::fs::read(&path).unwrap(), None);
+        let engine = NativeEngine::spawn(None, 50).unwrap();
+        let source = PlaySource { kind: SourceKind::Audius, item_id: "a".into(), url };
+        engine.load(&source, 0).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let s = engine.state().await.unwrap();
+        assert!(s.playing && s.position_ms > 100 && !s.failed, "{s:?}");
+        engine.seek(3_000).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(engine.state().await.unwrap().position_ms >= 3_000);
+        tokio::time::sleep(Duration::from_millis(1_300)).await;
+        let end = engine.state().await.unwrap();
+        assert!(end.ended && !end.failed, "{end:?}");
+    }
+
+    /// A stream that drops mid-way ends as failed, not as a crash.
+    #[tokio::test]
+    #[ignore = "needs an audio output device"]
+    async fn native_engine_reports_a_dropped_stream() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = tone(dir.path(), "tone.wav", 6.0);
+        let url = crate::core::playback::http_source::tests::serve(std::fs::read(&path).unwrap(), Some(200_000));
+        let engine = NativeEngine::spawn(None, 50).unwrap();
+        let source = PlaySource { kind: SourceKind::Audius, item_id: "a".into(), url };
+        engine.load(&source, 0).await.unwrap();
+        let mut failed = false;
+        for _ in 0..80 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let s = engine.state().await.unwrap();
+            if s.failed {
+                failed = true;
+                break;
+            }
+        }
+        assert!(failed, "dropped stream must be reported");
     }
 
     /// Plays through the real default output (silent tone). Run on a PC with audio:

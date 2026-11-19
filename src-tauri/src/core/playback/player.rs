@@ -56,7 +56,10 @@ pub struct Player {
 impl Player {
     pub fn new(engines: Vec<Arc<dyn Engine>>, candidates: Arc<dyn Candidates>, queue: Queue) -> Self {
         Self {
-            engines: engines.into_iter().map(|e| (e.kind(), e)).collect(),
+            engines: engines
+                .into_iter()
+                .flat_map(|e| e.kinds().iter().map(move |k| (*k, e.clone())).collect::<Vec<_>>())
+                .collect(),
             candidates,
             queue,
             status: PlayerStatus::Idle,
@@ -114,7 +117,7 @@ impl Player {
             }
             // Only one engine plays at a time: pause the previous one when switching.
             if let Some(prev) = self.active_engine() {
-                if prev.kind() != engine.kind() {
+                if !Arc::ptr_eq(&prev, &engine) {
                     prev.pause().await?;
                 }
             }
@@ -251,8 +254,13 @@ pub(crate) mod tests {
 
     #[async_trait]
     impl Engine for FakeEngine {
-        fn kind(&self) -> SourceKind {
-            self.kind
+        fn kinds(&self) -> &'static [SourceKind] {
+            match self.kind {
+                SourceKind::Local => &[SourceKind::Local],
+                SourceKind::Spotify => &[SourceKind::Spotify],
+                SourceKind::Youtube => &[SourceKind::Youtube],
+                SourceKind::Audius => &[SourceKind::Audius],
+            }
         }
         async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason> {
             if self.blocked.contains(&source.item_id) {

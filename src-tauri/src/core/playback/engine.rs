@@ -54,11 +54,14 @@ pub struct EngineState {
     pub duration_ms: Option<u32>,
     pub playing: bool,
     pub ended: bool,
+    /// The item stopped because of an error (e.g. a dropped stream), not because it finished.
+    pub failed: bool,
 }
 
 #[async_trait]
 pub trait Engine: Send + Sync {
-    fn kind(&self) -> SourceKind;
+    /// Source kinds this engine plays (NativeEngine: local files and Audius streams).
+    fn kinds(&self) -> &'static [SourceKind];
 
     /// Cheap check before loading (Premium/device, embeddable, file exists, reachable).
     async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason>;

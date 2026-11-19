@@ -60,6 +60,13 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-06 — NativeEngine HTTP streaming** (2026-11-19): `HttpSource` (Read + Seek) with a download
+  thread using Range requests into memory (never disk), restart on far seeks, 15 s stall timeout,
+  error flag on dropped connections; NativeEngine plays http(s) URLs (Audius kind) and reports
+  `failed`; `Engine::kinds` replaces `kind`. Tests against a local Range server (byte-exact,
+  seek, drop → error, streamed WAV decode + seek); real-device stream/seek/drop tests passed on
+  the owner's PC. A real Audius URL is verified with UP-13 (needs the H13 API key).
+
 - **UP-03 — YouTube embed fix** (2026-11-19): https app scheme (https://tauri.localhost), nocookie
   embed with `origin` + strict-origin-when-cross-origin referrer, official IFrame API attached to
   our iframe (≥ 200×200), `player://youtube-command`, `youtube_test_playback` bridge with
