@@ -13,6 +13,12 @@ Acceptance criteria:
 
 ## Done
 
+- **T-04 — Shell** (2026-11-19): undecorated window with custom glass title bar (drag,
+  back/forward, Windows caption buttons), floating glass sidebar collapsing to icons below
+  1100 px, floating glass player bar placeholder, all routes with empty states, shortcuts
+  (Ctrl+K/L/, · Alt+arrows · Space), window size/position persisted via
+  tauri-plugin-window-state. 47 Vitest tests; all checks green.
+
 - **T-03a — Apple-inspired redesign** (2026-11-19, ADR 0002): main window built in Rust with
   Mica on Windows 11 (opaque fallback; `UNISON_MATERIAL=acrylic|off` override until T-71);
   label/fill/glass tokens with reduced-transparency fallback; artwork-adaptive accent with

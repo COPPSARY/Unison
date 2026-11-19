@@ -3,11 +3,6 @@ import { strings } from "@/i18n";
 import { renderRoute } from "@/test/render";
 
 describe("routes", () => {
-  it("renders the wordmark at /", () => {
-    renderRoute("/");
-    expect(screen.getByRole("heading", { name: strings.app.name })).toBeInTheDocument();
-  });
-
   it("renders every UI kit section at /dev/ui", () => {
     renderRoute("/dev/ui");
     const s = strings.devUi;

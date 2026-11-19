@@ -15,7 +15,8 @@
     "sort": "Sort",
     "source": "Source",
     "more": "More",
-    "ok": "OK"
+    "ok": "OK",
+    "goToSettings": "Open Settings"
   },
   "source": {
     "all": "All",
@@ -36,7 +37,12 @@
     "repeat": "Repeat",
     "like": "Like",
     "queue": "Queue",
-    "volume": "Volume"
+    "volume": "Volume",
+    "notPlaying": "Not playing",
+    "devices": "Devices",
+    "expand": "Expand",
+    "seek": "Seek",
+    "playerBar": "Player"
   },
   "track": {
     "addToPlaylist": "Add to playlist",
@@ -126,5 +132,83 @@
     "sampleArtist": "Sample artist",
     "glassButton": "Glass",
     "large": "Large"
+  },
+  "nav": {
+    "listen": "Listen",
+    "library": "Library",
+    "yourPlaylists": "Your playlists",
+    "home": "Home",
+    "search": "Search",
+    "liked": "Liked songs",
+    "albums": "Albums",
+    "playlists": "Playlists",
+    "artists": "Artists",
+    "settings": "Settings",
+    "uiKit": "UI kit",
+    "noPlaylists": "Playlists you make or follow appear here.",
+    "back": "Back",
+    "forward": "Forward",
+    "sidebar": "Sidebar"
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "account": {
+    "notConnected": "No account connected",
+    "connect": "Connect an account"
+  },
+  "pages": {
+    "home": {
+      "title": "Home",
+      "emptyTitle": "Connect a music account to fill Home",
+      "emptyBody": "Unison builds picks from your Spotify and YouTube libraries."
+    },
+    "search": {
+      "title": "Search",
+      "placeholder": "Songs, artists, albums",
+      "emptyBody": "Search your library, then Spotify and YouTube."
+    },
+    "liked": {
+      "title": "Liked songs",
+      "emptyTitle": "No liked songs yet",
+      "emptyBody": "Songs you like on Spotify or YouTube show up here after you connect."
+    },
+    "albums": {
+      "title": "Albums",
+      "emptyTitle": "No saved albums yet",
+      "emptyBody": "Albums you save on Spotify show up here."
+    },
+    "playlists": {
+      "title": "Playlists",
+      "emptyTitle": "No playlists yet",
+      "emptyBody": "Playlists from Spotify and YouTube show up here."
+    },
+    "artists": {
+      "title": "Artists",
+      "emptyTitle": "No artists yet",
+      "emptyBody": "Artists you follow and channels you subscribe to show up here."
+    },
+    "playlist": {
+      "title": "Playlist",
+      "emptyTitle": "Playlist not found",
+      "emptyBody": "It may have been removed, or your library hasn't synced yet."
+    },
+    "album": {
+      "title": "Album",
+      "emptyTitle": "Album not found",
+      "emptyBody": "It may have been removed, or your library hasn't synced yet."
+    },
+    "artist": {
+      "title": "Artist",
+      "emptyTitle": "Artist not found",
+      "emptyBody": "It may have been removed, or your library hasn't synced yet."
+    },
+    "settings": {
+      "title": "Settings",
+      "emptyBody": "Accounts, playback, appearance and data settings arrive in upcoming updates."
+    }
   }
 }

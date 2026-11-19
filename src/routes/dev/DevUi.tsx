@@ -15,7 +15,8 @@ import {
   Unplug,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
+import { Page } from "@/components/shell/Page";
 import {
   Banner,
   Button,
@@ -157,26 +158,21 @@ export function DevUi() {
   ];
 
   return (
-    <div className="min-h-full bg-background">
-      <header className="glass glass-flat sticky top-0 z-30 flex h-14 items-center justify-between gap-4 px-8">
-        <h1 className="text-title2 text-text">{s.title}</h1>
-        <div className="flex items-center gap-3">
-          <Segmented<Theme>
-            label={s.theme}
-            value={theme}
-            onValueChange={setTheme}
-            options={[
-              { value: "dark", label: s.dark },
-              { value: "light", label: s.light },
-            ]}
-          />
-          <Link to="/" className="u-tone text-callout text-text-muted hover:text-text">
-            {s.back}
-          </Link>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-[960px] px-8 pb-16">
+    <Page
+      title={s.title}
+      toolbar={
+        <Segmented<Theme>
+          label={s.theme}
+          value={theme}
+          onValueChange={setTheme}
+          options={[
+            { value: "dark", label: s.dark },
+            { value: "light", label: s.light },
+          ]}
+        />
+      }
+    >
+      <div className="max-w-[960px]">
         <Section title={s.materials}>
           <ArtworkStage color={stageColor}>
             <div className="flex flex-wrap gap-3">
@@ -544,6 +540,6 @@ export function DevUi() {
           </div>
         </Section>
       </div>
-    </div>
+    </Page>
   );
 }

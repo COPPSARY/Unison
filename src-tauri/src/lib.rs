@@ -4,6 +4,7 @@ mod core;
 
 use crate::core::window_material::{self, Material};
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_window_state::StateFlags;
 
 /// Builds the main window in code so the backdrop material can depend on the Windows build.
 fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
@@ -13,6 +14,9 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
         .title("Unison")
         .inner_size(1280.0, 800.0)
         .min_inner_size(960.0, 600.0)
+        // Custom title bar (T-04); Windows 11 still draws the rounded frame and shadow.
+        .decorations(false)
+        .shadow(true)
         .initialization_script(window_material::init_script(material));
 
     if let Some(effects) = material.effects() {
@@ -26,6 +30,12 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Restores size/position/maximised for windows created later in setup().
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                .build(),
+        )
         .setup(|app| {
             create_main_window(app)?;
             Ok(())
