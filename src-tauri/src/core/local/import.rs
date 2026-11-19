@@ -19,6 +19,8 @@ pub struct ImportConfig {
     pub extensions: Vec<String>,
     /// `<app data>/artwork`.
     pub artwork_dir: PathBuf,
+    /// Copy-on-drop: copy files here first and import the copies.
+    pub copy_to: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -61,11 +63,9 @@ fn prepare(path: &Path, known: Option<(i64, i64)>, artwork_dir: &Path) -> Prepar
     let Ok((fingerprint, size)) = fingerprint::fingerprint(path) else {
         return Prepared::Failed(Issue::new(path, super::IssueKind::Unreadable));
     };
-    let artwork_path = file_meta
-        .cover
-        .as_deref()
-        .and_then(|bytes| super::artwork::save_cover(bytes, artwork_dir))
-        .map(|p| p.to_string_lossy().into_owned());
+    let cover = file_meta.cover.as_deref().and_then(|bytes| super::artwork::save_cover(bytes, artwork_dir));
+    let artwork_url = cover.as_deref().and_then(super::artwork::url_for);
+    let artwork_path = cover.map(|p| p.to_string_lossy().into_owned());
     Prepared::File(Box::new(LocalFileInput {
         fingerprint,
         path: path.to_string_lossy().into_owned(),
@@ -73,6 +73,7 @@ fn prepare(path: &Path, known: Option<(i64, i64)>, artwork_dir: &Path) -> Prepar
         mtime,
         meta: tags::FileMeta { cover: None, ..file_meta },
         artwork_path,
+        artwork_url,
     }))
 }
 
@@ -125,7 +126,16 @@ async fn run_inner(
     summary: &mut ImportSummary,
 ) -> AppResult<()> {
     let extensions = config.extensions.clone();
-    let (files, issues) = blocking(move || scan::collect(&paths, &extensions)).await?;
+    let copy_to = config.copy_to.clone();
+    let (files, issues) = blocking(move || {
+        let (files, mut issues) = scan::collect(&paths, &extensions);
+        let Some(target) = copy_to else { return (files, issues) };
+        let roots: Vec<PathBuf> = paths.iter().map(|p| scan::absolute(p)).collect();
+        let (copies, copy_issues) = super::copy::copy_into(&files, &roots, &target);
+        issues.extend(copy_issues);
+        (copies, issues)
+    })
+    .await?;
     summary.failed += u32::try_from(issues.len()).unwrap_or(u32::MAX);
     for issue in issues {
         note(progress, issue);
@@ -214,6 +224,7 @@ mod tests {
     struct Env {
         dir: tempfile::TempDir,
         pool: SqlitePool,
+        copy_to: Option<PathBuf>,
     }
 
     impl Env {
@@ -221,7 +232,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let pool = db::open(&dir.path().join("unison.db")).await.unwrap();
             std::fs::create_dir(dir.path().join("music")).unwrap();
-            Self { dir, pool }
+            Self { dir, pool, copy_to: None }
         }
 
         fn music(&self) -> PathBuf {
@@ -233,6 +244,7 @@ mod tests {
             let config = ImportConfig {
                 extensions: crate::model::LocalSettings::default().extensions,
                 artwork_dir: self.dir.path().join("artwork"),
+                copy_to: self.copy_to.clone(),
             };
             let summary = run(&self.pool, 1, paths, config, &rec).await.unwrap();
             (summary, rec)
@@ -336,6 +348,15 @@ mod tests {
             .unwrap();
         let img = image::open(art.unwrap()).unwrap();
         assert_eq!(img.width(), 600);
+        // The merged track keeps Spotify's artwork; a local-only track gets the saved cover's URL.
+        let live_art: Option<String> = sqlx::query_scalar(
+            "SELECT t.artwork_url FROM tracks t JOIN track_sources s ON s.track_id = t.id
+             JOIN local_files f ON f.fingerprint = s.item_id WHERE f.path LIKE '%Live%'",
+        )
+        .fetch_one(&env.pool)
+        .await
+        .unwrap();
+        assert_eq!(live_art, None, "no embedded cover");
 
         // The resolver now sees both sources for the liked song.
         let sources = crate::core::playback::resolver::stored_sources(&env.pool, &track_id).await.unwrap();
@@ -416,6 +437,32 @@ mod tests {
             .await
             .unwrap();
         assert_ne!(now_track, track, "orphaned track replaced by a fresh row");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn local_only_tracks_get_a_cover_url_and_copy_on_drop_imports_copies() {
+        let mut env = Env::new().await;
+        let downloads = env.dir.path().join("Downloads");
+        std::fs::create_dir(&downloads).unwrap();
+        let file = downloads.join("song.wav");
+        write_wav(&file, 0.2, 30);
+        tag(&file, "Fresh", "Someone", None, Some(png(64, 64)));
+        let target = env.dir.path().join("Music").join("Unison");
+        env.copy_to = Some(target.clone());
+
+        let (summary, _) = env.import(vec![file.clone()]).await;
+        assert_eq!(summary.imported, 1);
+        let (url, art): (Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT s.url, t.artwork_url FROM track_sources s JOIN tracks t ON t.id = s.track_id",
+        )
+        .fetch_one(&env.pool)
+        .await
+        .unwrap();
+        assert_eq!(url.as_deref(), Some(scan::absolute(&target.join("song.wav")).to_string_lossy().as_ref()));
+        assert!(target.join("song.wav").is_file());
+        assert!(file.is_file(), "original kept");
+        let art = art.unwrap();
+        assert!(art.starts_with(crate::core::local::artwork::BASE_URL), "{art}");
     }
 
     #[tokio::test(flavor = "multi_thread")]

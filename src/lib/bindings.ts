@@ -38,6 +38,9 @@ export const commands = {
 	syncCancel: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<void>("sync_cancel", { provider }, options),
 	libraryLiked: (source: ProviderId | null, sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_liked", { source, sort, filter, offset, limit }, options),
 	libraryLikedStats: (source: ProviderId | null, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_liked_stats", { source, filter }, options),
+	/**  Library → Local files (tracks with an imported local file). */
+	libraryLocal: (sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_local", { sort, filter, offset, limit }, options),
+	libraryLocalStats: (filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_local_stats", { filter }, options),
 	libraryAlbums: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Album_Serialize[]>("library_albums", { source, sort, filter }, options),
 	libraryArtists: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Artist_Serialize[]>("library_artists", { source, sort, filter }, options),
 	playlistsList: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Playlist_Serialize[]>("playlists_list", { source, sort, filter }, options),
@@ -84,15 +87,26 @@ export const commands = {
 	/**  Plays a short quiet tone through the NativeEngine to check the output device. */
 	playerTestSound: (options?: InvokeOptions) => __TAURI_INVOKE<null>("player_test_sound", undefined, options),
 	/**
-	 *  Imports audio files and folders (referenced in place). Returns the job id at once; progress
-	 *  arrives as `local://import-progress`, and `local://changed` when the library changed.
+	 *  Imports audio files and folders. `copy`: `null` = follow "Copy dropped files". Returns the
+	 *  job id at once; progress arrives as `local://import-progress`, and `local://changed` when
+	 *  the library changed.
 	 */
-	localImport: (paths: string[], options?: InvokeOptions) => __TAURI_INVOKE<number>("local_import", { paths }, options),
+	localImport: (paths: string[], copy: boolean | null, options?: InvokeOptions) => __TAURI_INVOKE<number>("local_import", { paths, copy }, options),
+	/**
+	 *  Native "Add files" dialog (audio types from Settings → Local files), then imports the
+	 *  choice like a drop. `null` when cancelled. `title` / `filter_label` come from en.json.
+	 */
+	localAddFiles: (title: string, filterLabel: string, options?: InvokeOptions) => __TAURI_INVOKE<number | null>("local_add_files", { title, filterLabel }, options),
+	/**  Native "Add folder" dialog; the folder is always referenced in place (never copied). */
+	localAddFolder: (title: string, options?: InvokeOptions) => __TAURI_INVOKE<number | null>("local_add_folder", { title }, options),
+	/**  Where copy-on-drop puts files (the setting, else `<Music>/Unison`), for Settings. */
+	localCopyTarget: (options?: InvokeOptions) => __TAURI_INVOKE<string>("local_copy_target", undefined, options),
 };
 
 /** Events */
 export const events = {
 	localChanged: makeEvent<LocalChanged, LocalChanged>("local://changed"),
+	localDrag: makeEvent<LocalDrag, LocalDrag>("local://drag"),
 	localImportProgress: makeEvent<LocalImportProgress_Serialize, LocalImportProgress_Deserialize>("local://import-progress"),
 	playerFallback: makeEvent<PlayerFallback, PlayerFallback>("player://fallback"),
 	playerState: makeEvent<PlayerStateEvent_Serialize, PlayerStateEvent_Deserialize>("player://state"),
@@ -218,7 +232,9 @@ export type IssueKind =
 /**  DRM-protected purchase (.m4p). */
 "drmProtected" | 
 /**  Could not be read or parsed. */
-"unreadable";
+"unreadable" | 
+/**  Copy-on-drop: copying into the music folder failed (disk full, no permission …). */
+"copyFailed";
 
 /**  Sort orders for list and grid views. */
 export type LibrarySort = "dateAdded" | "title" | "artist";
@@ -234,6 +250,11 @@ export type LocalChanged = {
 	added: number,
 	removed: number,
 	updated: number,
+};
+
+/**  `local://drag`: files are being dragged over the window (`active`) or the drag ended. */
+export type LocalDrag = {
+	active: boolean,
 };
 
 /**  `local://import-progress`: sent after every batch and once more with `finished: true`. */
@@ -697,6 +718,15 @@ export type TrackPage_Serialize = {
 	nextOffset: number | null,
 };
 
+/**  One stored source of a track as shown in lists (Spotify, YouTube, a local file, Audius). */
+export type TrackSource = {
+	provider: SourceKind,
+	/**  Spotify track id, YouTube video id, local fingerprint or Audius id. */
+	itemId: string,
+	/**  Web URL, or the absolute file path for local files. */
+	url: string,
+};
+
 /**  One song, possibly available on several platforms. */
 export type Track_Deserialize = {
 	/**  Unified id (uuid v7) — or a provider-scoped id before matching. */
@@ -707,7 +737,7 @@ export type Track_Deserialize = {
 	durationMs?: number | null,
 	artwork?: string | null,
 	isrc?: string | null,
-	sources: SourceRef[],
+	sources: TrackSource[],
 	available: boolean,
 	/**  When it was liked/added (library and playlist views), Unix seconds. */
 	addedAt?: number | null,
@@ -723,7 +753,7 @@ export type Track_Serialize = {
 	durationMs: number | null,
 	artwork: string | null,
 	isrc: string | null,
-	sources: SourceRef[],
+	sources: TrackSource[],
 	available: boolean,
 	/**  When it was liked/added (library and playlist views), Unix seconds. */
 	addedAt: number | null,

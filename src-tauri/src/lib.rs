@@ -38,7 +38,14 @@ fn create_main_window(app: &tauri::App, saved: model::WindowMaterial) -> tauri::
         builder = builder.transparent(true).effects(effects);
     }
 
-    builder.build()?;
+    let window = builder.build()?;
+    // Files dropped anywhere on the window are imported (UP-11).
+    let handle = app.handle().clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::DragDrop(drop) = event {
+            core::local::jobs::on_drag_drop(&handle, drop);
+        }
+    });
     Ok(())
 }
 
@@ -94,6 +101,18 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        // Native Add files / Add folder dialogs, opened from Rust only (no JS permissions).
+        .plugin(tauri_plugin_dialog::init())
+        // Saved covers of local files (artwork://localhost/<hash>.jpg); nothing else is served.
+        .register_uri_scheme_protocol(core::local::artwork::SCHEME, |ctx, request| {
+            match ctx.app_handle().path().app_data_dir() {
+                Ok(dir) => core::local::artwork::serve(&dir.join("artwork"), request.uri().path()),
+                Err(_) => tauri::http::Response::builder()
+                    .status(tauri::http::StatusCode::NOT_FOUND)
+                    .body(Vec::new())
+                    .unwrap_or_default(),
+            }
+        })
         // Restores size/position/maximised for windows created later in setup().
         .plugin(
             tauri_plugin_window_state::Builder::default()

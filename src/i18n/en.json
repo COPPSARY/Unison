@@ -169,6 +169,7 @@
     "albums": "Albums",
     "playlists": "Playlists",
     "artists": "Artists",
+    "local": "Local files",
     "settings": "Settings",
     "uiKit": "UI kit",
     "noPlaylists": "Playlists you make or follow appear here.",
@@ -217,6 +218,18 @@
       "title": "Artists",
       "emptyTitle": "No artists yet",
       "emptyBody": "Artists you follow and channels you subscribe to show up here."
+    },
+    "local": {
+      "title": "Local files",
+      "emptyTitle": "No local files yet",
+      "emptyBody": "Add music from this PC, or drop files and folders anywhere on the window.",
+      "addFiles": "Add files",
+      "addFolder": "Add folder",
+      "filesDialogTitle": "Add music files",
+      "folderDialogTitle": "Add a music folder",
+      "audioFilter": "Audio files",
+      "scanning": "Looking for music…",
+      "importing": "Adding {done} of {total}…"
     },
     "playlist": {
       "title": "Playlist",
@@ -274,6 +287,12 @@
     "version": "Version",
     "schema": "Database schema",
     "playback": "Playback",
+    "local": {
+      "title": "Local files",
+      "copyOnDrop": "Copy dropped files into your music folder",
+      "copyTarget": "Copies go to {path}",
+      "referenceHint": "Dropped files stay where they are."
+    },
     "youtube": {
       "title": "YouTube player",
       "test": "Test playback",
@@ -356,5 +375,27 @@
     "sortArtist": "Artist",
     "sortOwner": "Owner",
     "sortName": "Name"
+  },
+  "localImport": {
+    "dropTitle": "Drop to add to your library",
+    "dropReference": "Files stay where they are.",
+    "dropCopy": "Files are copied to your music folder.",
+    "added": "Added {count} songs",
+    "addedOne": "Added 1 song",
+    "nothingNew": "Already in your library",
+    "nothingNewBody": "Those files were added before.",
+    "issues": "{count} files couldn't be added",
+    "issuesOne": "1 file couldn't be added",
+    "details": "Details",
+    "detailsTitle": "Files not added",
+    "failed": "Adding files stopped",
+    "reason": {
+      "missing": "File not found",
+      "unsupportedFormat": "Format not supported",
+      "drmProtected": "Protected by DRM",
+      "unreadable": "Couldn't be read",
+      "copyFailed": "Couldn't be copied"
+    },
+    "nothingFound": "No music files found"
   }
 }

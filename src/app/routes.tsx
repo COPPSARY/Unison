@@ -7,6 +7,7 @@ import { Home } from "@/routes/home/Home";
 import { Albums } from "@/routes/library/Albums";
 import { Artists } from "@/routes/library/Artists";
 import { Liked } from "@/routes/library/Liked";
+import { Local } from "@/routes/library/Local";
 import { Playlists } from "@/routes/library/Playlists";
 import { Playlist } from "@/routes/playlist/Playlist";
 import { Search } from "@/routes/search/Search";
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
       { path: "/library/albums", element: <Albums /> },
       { path: "/library/playlists", element: <Playlists /> },
       { path: "/library/artists", element: <Artists /> },
+      { path: "/library/local", element: <Local /> },
       { path: "/playlist/:id", element: <Playlist /> },
       { path: "/album/:id", element: <Album /> },
       { path: "/artist/:id", element: <Artist /> },

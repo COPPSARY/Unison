@@ -120,6 +120,27 @@ export function useLikedStats(provider: ProviderId | null, query: string) {
   });
 }
 
+/** Library → Local files. Keys start with "local" so import events can refresh them. */
+export function useLocalTracks({ sort, query }: { sort: LibrarySort; query: string }) {
+  return useInfiniteQuery({
+    queryKey: ["local", "tracks", sort, query],
+    queryFn: ({ pageParam }) => commands.libraryLocal(sort, filterArg(query), pageParam, LIKED_PAGE),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
+export function useLocalStats(query: string) {
+  return useQuery({
+    queryKey: ["local", "stats", query],
+    queryFn: () => commands.libraryLocalStats(filterArg(query)),
+    placeholderData: keepPreviousData,
+    enabled: enabled(),
+  });
+}
+
 export function useAlbums({ provider, sort, query }: LibraryArgs) {
   return useQuery({
     queryKey: ["albums", provider, sort, query],

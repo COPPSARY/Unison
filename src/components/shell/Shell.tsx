@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router";
+import { DropOverlay } from "@/components/local/DropOverlay";
+import { ImportIssuesDialog } from "@/components/local/ImportIssuesDialog";
 import { PlayerBar } from "@/components/player/PlayerBar";
 import { YouTubeDock } from "@/components/player/YouTubeDock";
 import { cn } from "@/lib/cn";
-import { useSyncEvents } from "@/lib/events";
+import { useLocalEvents, useSyncEvents } from "@/lib/events";
 import { usePlayerEvents } from "@/lib/playback";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { ScrollContainerContext } from "./ScrollContainer";
@@ -22,6 +24,7 @@ export function Shell() {
   const { pathname } = useLocation();
   useShortcuts();
   useSyncEvents();
+  useLocalEvents();
   usePlayerEvents();
 
   // New page: start at the top.
@@ -50,6 +53,8 @@ export function Shell() {
         <YouTubeDock />
       </div>
       <PlayerBar />
+      <DropOverlay />
+      <ImportIssuesDialog />
     </div>
   );
 }

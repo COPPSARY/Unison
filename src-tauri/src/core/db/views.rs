@@ -5,7 +5,8 @@
 use sqlx::SqlitePool;
 
 use crate::error::AppResult;
-use crate::model::{Album, Artist, LibrarySort, ListStats, Page, Playlist, ProviderId, SourceRef, Track};
+use crate::core::playback::resolver::kind_of;
+use crate::model::{Album, Artist, LibrarySort, ListStats, Page, Playlist, ProviderId, Track, TrackSource};
 
 /// Turns user text into a `LIKE` pattern (escaped, lowercase). `None` for empty input.
 pub fn like_pattern(filter: Option<&str>) -> Option<String> {
@@ -60,7 +61,7 @@ pub(crate) fn to_track(row: TrackRow) -> Track {
         sources: sources
             .into_iter()
             .filter_map(|s| {
-                Some(SourceRef { provider: ProviderId::parse(&s.provider)?, item_id: s.item_id, url: s.url })
+                Some(TrackSource { provider: kind_of(&s.provider)?, item_id: s.item_id, url: s.url })
             })
             .collect(),
         available,
@@ -68,8 +69,15 @@ pub(crate) fn to_track(row: TrackRow) -> Track {
     }
 }
 
+/// Track rows of one library kind (`liked` or `local`), merged per unified track.
 macro_rules! liked_select {
     ($order:literal) => {
+        tracks_select!("liked", $order)
+    };
+}
+
+macro_rules! tracks_select {
+    ($kind:literal, $order:literal) => {
         concat!(
             "SELECT t.id, t.title, t.artists_json, t.album, t.duration_ms, t.artwork_url, t.isrc,
                     MAX(l.added_at) AS added_at,
@@ -77,7 +85,9 @@ macro_rules! liked_select {
                               'url', s.url, 'available', s.available))
                        FROM track_sources s WHERE s.track_id = t.id) AS sources_json
              FROM library l JOIN tracks t ON t.id = l.track_id
-             WHERE l.kind = 'liked' AND (?1 IS NULL OR l.provider = ?1)
+             WHERE l.kind = '",
+            $kind,
+            "' AND (?1 IS NULL OR l.provider = ?1)
                AND (?2 IS NULL OR t.title_norm LIKE ?2 ESCAPE '\\'
                     OR lower(t.artists_json) LIKE ?2 ESCAPE '\\'
                     OR lower(COALESCE(t.album, '')) LIKE ?2 ESCAPE '\\')
@@ -135,6 +145,41 @@ pub async fn liked_stats(pool: &SqlitePool, source: Option<ProviderId>, filter: 
         .bind(pattern.as_deref())
         .fetch_one(pool)
         .await?;
+    Ok(ListStats { count: u32::try_from(count).unwrap_or(u32::MAX), duration_ms: duration as f64 })
+}
+
+/// Local files (Library → Local files): one row per unified track with a local file.
+pub async fn local(pool: &SqlitePool, sort: LibrarySort, filter: Option<&str>, offset: u32, limit: u32) -> AppResult<Page<Track>> {
+    let pattern = like_pattern(filter);
+    let sql = match sort {
+        LibrarySort::DateAdded => tracks_select!("local", "added_at DESC, t.title_norm ASC"),
+        LibrarySort::Title => tracks_select!("local", "t.title_norm ASC, t.artist_norm ASC"),
+        LibrarySort::Artist => tracks_select!("local", "t.artist_norm ASC, t.album ASC, t.title_norm ASC"),
+    };
+    let rows: Vec<TrackRow> = sqlx::query_as(sql)
+        .bind(None::<&str>)
+        .bind(pattern.as_deref())
+        .bind(i64::from(limit.min(1000)))
+        .bind(i64::from(offset))
+        .fetch_all(pool)
+        .await?;
+    let stats = local_stats(pool, filter).await?;
+    let items: Vec<Track> = rows.into_iter().map(to_track).collect();
+    let end = offset.saturating_add(u32::try_from(items.len()).unwrap_or(u32::MAX));
+    Ok(Page { next_offset: (end < stats.count).then_some(end), total: stats.count, items })
+}
+
+/// Count and total duration of the (filtered) local files list.
+pub async fn local_stats(pool: &SqlitePool, filter: Option<&str>) -> AppResult<ListStats> {
+    const SQL: &str = "SELECT COUNT(*), COALESCE(SUM(d), 0) FROM (SELECT t.id, MAX(t.duration_ms) AS d
+         FROM library l JOIN tracks t ON t.id = l.track_id
+         WHERE l.kind = 'local'
+           AND (?1 IS NULL OR t.title_norm LIKE ?1 ESCAPE '\\'
+                OR lower(t.artists_json) LIKE ?1 ESCAPE '\\'
+                OR lower(COALESCE(t.album, '')) LIKE ?1 ESCAPE '\\')
+         GROUP BY t.id)";
+    let (count, duration): (i64, i64) =
+        sqlx::query_as(SQL).bind(like_pattern(filter).as_deref()).fetch_one(pool).await?;
     Ok(ListStats { count: u32::try_from(count).unwrap_or(u32::MAX), duration_ms: duration as f64 })
 }
 
@@ -356,6 +401,50 @@ mod tests {
 
         let stats = liked_stats(&pool, None, None).await.unwrap();
         assert_eq!((stats.count, stats.duration_ms), (3, 6000.0));
+    }
+
+    #[tokio::test]
+    async fn local_lists_tracks_with_local_files_and_their_marks() {
+        use crate::core::db::local::{store, LocalFileInput};
+        use crate::core::local::tags::FileMeta;
+        use crate::core::matching::matcher::MatchIndex;
+        use crate::model::SourceKind;
+
+        let (_d, pool) = seeded().await;
+        let mut c = pool.acquire().await.unwrap();
+        let mut index = MatchIndex::load(&mut c).await.unwrap();
+        let file = |fp: &str, title: &str, artist: &str| LocalFileInput {
+            fingerprint: fp.into(),
+            path: format!("/music/{fp}.mp3"),
+            size: 1,
+            mtime: 0,
+            meta: FileMeta {
+                title: title.into(),
+                artists: vec![artist.into()],
+                duration_ms: Some(1000),
+                codec: Some("mp3".into()),
+                ..FileMeta::default()
+            },
+            artwork_path: None,
+            artwork_url: None,
+        };
+        // "Bravo" by Zed is already liked on Spotify (seeded): the file merges into it.
+        store(&mut c, &mut index, &file("fp1", "Bravo", "Zed"), 10).await.unwrap();
+        store(&mut c, &mut index, &file("fp2", "Delta", "Nobody"), 20).await.unwrap();
+        drop(c);
+
+        let page = local(&pool, LibrarySort::DateAdded, None, 0, 50).await.unwrap();
+        let titles: Vec<_> = page.items.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, vec!["Delta", "Bravo"]);
+        let bravo = &page.items[1];
+        let mut kinds: Vec<_> = bravo.sources.iter().map(|s| s.provider).collect();
+        kinds.sort_by_key(|k| format!("{k:?}"));
+        assert_eq!(kinds, vec![SourceKind::Local, SourceKind::Spotify]);
+        assert_eq!(local(&pool, LibrarySort::Title, Some("delt"), 0, 50).await.unwrap().total, 1);
+        let stats = local_stats(&pool, None).await.unwrap();
+        assert_eq!(stats.count, 2);
+        // Liked songs still lists only liked rows.
+        assert_eq!(liked_stats(&pool, None, None).await.unwrap().count, 3);
     }
 
     #[tokio::test]

@@ -23,6 +23,8 @@ pub struct LocalFileInput {
     pub mtime: i64,
     pub meta: FileMeta,
     pub artwork_path: Option<String>,
+    /// Webview URL of the saved cover (`artwork://…`).
+    pub artwork_url: Option<String>,
 }
 
 /// What storing a file did.
@@ -143,13 +145,14 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
             // Keep the existing (usually richer) metadata; only fill gaps.
             sqlx::query(
                 "UPDATE tracks SET isrc = COALESCE(isrc, ?2), duration_ms = COALESCE(duration_ms, ?3),
-                   album = COALESCE(album, ?4)
+                   album = COALESCE(album, ?4), artwork_url = COALESCE(artwork_url, ?5)
                  WHERE id = ?1",
             )
             .bind(&found.track_id)
             .bind(&m.isrc)
             .bind(m.duration_ms)
             .bind(&m.album)
+            .bind(&f.artwork_url)
             .execute(&mut *conn)
             .await?;
             (found.track_id, found.confidence)
@@ -160,7 +163,7 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
             sqlx::query(
                 "INSERT INTO tracks (id, title, title_norm, artists_json, artist_norm, album,
                    duration_ms, isrc, artwork_url, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )
             .bind(&id)
             .bind(&m.title)
@@ -170,6 +173,7 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
             .bind(&m.album)
             .bind(m.duration_ms)
             .bind(&m.isrc)
+            .bind(&f.artwork_url)
             .bind(now)
             .execute(&mut *conn)
             .await?;

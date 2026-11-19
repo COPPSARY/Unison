@@ -3,7 +3,9 @@ import { useEffect } from "react";
 import { format, strings } from "@/i18n";
 import { events } from "@/lib/bindings";
 import { errorMessage } from "@/lib/errors";
+import { onImportProgress } from "@/lib/local";
 import { isTauri } from "@/lib/window";
+import { useLocalImportStore } from "@/stores/localImport";
 import { useSyncStore } from "@/stores/sync";
 import { toast } from "@/stores/toast";
 
@@ -48,6 +50,34 @@ export function useSyncEvents() {
         }
       }),
     );
+
+    return () => {
+      disposed = true;
+      unlisten.forEach((fn) => fn());
+    };
+  }, [qc]);
+}
+
+/** Subscribes to local-file events: drag overlay, import progress / summary, library refresh. */
+export function useLocalEvents() {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    const unlisten: Array<() => void> = [];
+    const keep = (p: Promise<() => void>) =>
+      void p.then((fn) => (disposed ? fn() : unlisten.push(fn)));
+
+    keep(events.localDrag.listen(({ payload }) => useLocalImportStore.getState().setDragging(payload.active)));
+    keep(
+      events.localImportProgress.listen(({ payload }) => {
+        onImportProgress(payload);
+        // New rows land batch by batch: refresh the local list as they arrive.
+        if (payload.imported > 0) void qc.invalidateQueries({ queryKey: ["local"] });
+      }),
+    );
+    keep(events.localChanged.listen(() => void qc.invalidateQueries()));
 
     return () => {
       disposed = true;

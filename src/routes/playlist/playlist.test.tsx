@@ -15,6 +15,9 @@ vi.mock("@/lib/bindings", () => ({
   events: {
     syncProgress: { listen: () => Promise.resolve(() => undefined) },
     syncFinished: { listen: () => Promise.resolve(() => undefined) },
+    localDrag: { listen: () => Promise.resolve(() => undefined) },
+    localImportProgress: { listen: () => Promise.resolve(() => undefined) },
+    localChanged: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
     playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },

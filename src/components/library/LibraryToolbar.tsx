@@ -5,19 +5,30 @@ import type { LibrarySort } from "@/lib/bindings";
 import { TRACK_SORTS, type LibraryControls, type SortOption, type SourceFilter } from "./controls";
 
 /** Source filter (All / Spotify / YouTube), text filter and sort (spec §3 Toolbar). */
-export function LibraryToolbar({ controls, sorts = TRACK_SORTS }: { controls: LibraryControls; sorts?: SortOption[] }) {
+export function LibraryToolbar({
+  controls,
+  sorts = TRACK_SORTS,
+  showSource = true,
+}: {
+  controls: LibraryControls;
+  sorts?: SortOption[];
+  /** Hide the source filter on single-source lists (Local files). */
+  showSource?: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-3 pb-4">
-      <Segmented<SourceFilter>
-        label={strings.common.source}
-        value={controls.source}
-        onValueChange={controls.setSource}
-        options={[
-          { value: "all", label: strings.source.all },
-          { value: "spotify", label: strings.source.spotify },
-          { value: "youtube", label: strings.source.youtube },
-        ]}
-      />
+      {showSource ? (
+        <Segmented<SourceFilter>
+          label={strings.common.source}
+          value={controls.source}
+          onValueChange={controls.setSource}
+          options={[
+            { value: "all", label: strings.source.all },
+            { value: "spotify", label: strings.source.spotify },
+            { value: "youtube", label: strings.source.youtube },
+          ]}
+        />
+      ) : null}
       <div className="w-60">
         <Input
           shape="capsule"

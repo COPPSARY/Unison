@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { renderRoute } from "@/test/render";
+import { useUiStore } from "@/stores/ui";
 
 const youtubeListeners: Array<(e: { payload: unknown }) => void> = [];
 
@@ -23,12 +24,17 @@ const cmd = {
   playerSetOutput: vi.fn(),
   playerTestSound: vi.fn(),
   settingsGet: vi.fn(),
+  settingsSet: vi.fn(),
+  localCopyTarget: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
   events: {
     syncProgress: { listen: () => Promise.resolve(() => undefined) },
     syncFinished: { listen: () => Promise.resolve(() => undefined) },
+    localDrag: { listen: () => Promise.resolve(() => undefined) },
+    localImportProgress: { listen: () => Promise.resolve(() => undefined) },
+    localChanged: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
     playerYoutubeCommand: {
@@ -290,6 +296,25 @@ describe("Settings → Playback → Output", () => {
     renderRoute("/settings");
     await userEvent.click(await screen.findByRole("button", { name: strings.settings.output.test }));
     expect(await screen.findByText(strings.errors.outputDeviceUnavailable)).toBeInTheDocument();
+  });
+});
+
+describe("Settings → Local files", () => {
+  it("turns copy-on-drop on and shows where copies go", async () => {
+    const defaults = defaultsForTest();
+    useUiStore.getState().hydrate(defaults);
+    cmd.localCopyTarget.mockResolvedValue("C:\\Users\\me\\Music\\Unison");
+    cmd.settingsSet.mockImplementation((next: typeof defaults) => Promise.resolve(next));
+    renderRoute("/settings");
+    const toggle = await screen.findByRole("switch", { name: strings.settings.local.copyOnDrop });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(strings.settings.local.referenceHint)).toBeInTheDocument();
+    await userEvent.click(toggle);
+    await waitFor(() =>
+      expect(cmd.settingsSet).toHaveBeenCalledWith(expect.objectContaining({ local: expect.objectContaining({ copyOnDrop: true }) })),
+    );
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByText(/Copies go to C:\\Users\\me\\Music\\Unison/)).toBeInTheDocument();
   });
 });
 

@@ -77,6 +77,33 @@ Acceptance criteria:
 - Status (2026-11-19): built and committed; all checks green incl. the fallback matrix. Waiting
   for the owner's live test (double-click a liked song with Spotify open).
 
+### UP-11 — Drag-and-drop, Add files / Add folder, copy-on-drop
+Acceptance criteria:
+- Window drag-and-drop (Tauri `DragDropEvent`, handled in Rust): Enter/Leave → `local://drag`
+  for a drop overlay; Drop → import job (same pipeline as UP-10). No HTML5 drag handling.
+- `local_add_files` / `local_add_folder`: native dialogs (tauri-plugin-dialog, Rust-side only,
+  no JS permissions; titles from en.json), audio-type filter from Settings → Local files;
+  cancel → null. Folders are always referenced in place.
+- Copy-on-drop (`local.copyOnDrop`, target = `local.copyTarget` or `<Music>/Unison`): drops and
+  Add files copy first (folder layout kept, originals only read, same-size file at the target
+  reused, name clashes get " (2)"), then import the copies; copy failures → `copyFailed` reason.
+  Settings → Local files: switch + where copies go.
+- Library → Local files (sidebar entry): `library_local` / `library_local_stats` (local DB),
+  header with count/duration, live import progress, Play / Shuffle / Add files / Add folder,
+  filter + sort, virtualised table with the "This PC" mark; loading, empty (with add buttons),
+  no-results and error states.
+- Import summary toast: added count, or per-file problems with Details → dialog listing each
+  file and its reason (not found, format not supported, DRM, unreadable, couldn't be copied);
+  "Already in your library" / "No music files found" / "Adding files stopped".
+- Local covers: saved covers are served by an `artwork` URI scheme that only answers
+  `<32 hex>.jpg` names from `<app data>/artwork` (CSP img-src allows it); new local-only tracks
+  store that URL, merged tracks keep their Spotify art (gap-filled otherwise).
+- Track lists carry every source kind (`TrackSource.provider: SourceKind`), so local / Audius
+  marks show next to Spotify / YouTube.
+- Status (2026-11-20): built; clippy -D warnings, 182 Rust + 108 Vitest tests green (Linux).
+  Waiting for the owner's live check: drop a few MP3s / a folder (plus a .m4p or .txt) on the
+  window, try Add files / Add folder, and turn on Copy dropped files once.
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

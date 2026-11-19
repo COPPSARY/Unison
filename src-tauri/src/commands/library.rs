@@ -30,6 +30,25 @@ pub async fn library_liked_stats(
     views::liked_stats(&state.db, source, filter.as_deref()).await
 }
 
+/// Library → Local files (tracks with an imported local file).
+#[tauri::command]
+#[specta::specta]
+pub async fn library_local(
+    state: State<'_, AppState>,
+    sort: LibrarySort,
+    filter: Option<String>,
+    offset: u32,
+    limit: u32,
+) -> AppResult<TrackPage> {
+    views::local(&state.db, sort, filter.as_deref(), offset, limit).await.map(TrackPage::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_local_stats(state: State<'_, AppState>, filter: Option<String>) -> AppResult<ListStats> {
+    views::local_stats(&state.db, filter.as_deref()).await
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn library_albums(

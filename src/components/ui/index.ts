@@ -10,5 +10,6 @@ export { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./Menu"
 export { Segmented } from "./Segmented";
 export { Select } from "./Select";
 export { Skeleton } from "./Skeleton";
+export { Switch } from "./Switch";
 export { Toaster } from "./Toast";
 export { Tooltip, TooltipProvider } from "./Tooltip";

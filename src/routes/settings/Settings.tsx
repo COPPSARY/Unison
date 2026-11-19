@@ -5,6 +5,7 @@ import { strings } from "@/i18n";
 import { errorMessage } from "@/lib/errors";
 import { useAppInfo } from "@/lib/queries";
 import { AccountsSection } from "./AccountsSection";
+import { LocalSection } from "./LocalSection";
 import { OutputRow } from "./OutputRow";
 import { SpotifyPlaybackRow } from "./SpotifyPlaybackRow";
 import { YoutubeTestCard } from "./YoutubeTestCard";
@@ -45,6 +46,7 @@ export function Settings() {
       <div className="mx-auto flex w-full max-w-[720px] flex-col gap-8">
         <AccountsSection />
         <PlaybackSection />
+        <LocalSection />
         <div className="flex flex-col gap-2">
         <h2 className="px-4 text-footnote font-bold text-text-tertiary">{s.about}</h2>
         <section className="rounded-card bg-surface">

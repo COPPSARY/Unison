@@ -52,6 +52,17 @@ pub struct SourceRef {
     pub url: String,
 }
 
+/// One stored source of a track as shown in lists (Spotify, YouTube, a local file, Audius).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackSource {
+    pub provider: SourceKind,
+    /// Spotify track id, YouTube video id, local fingerprint or Audius id.
+    pub item_id: String,
+    /// Web URL, or the absolute file path for local files.
+    pub url: String,
+}
+
 /// One song, possibly available on several platforms.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -64,7 +75,7 @@ pub struct Track {
     pub duration_ms: Option<u32>,
     pub artwork: Option<String>,
     pub isrc: Option<String>,
-    pub sources: Vec<SourceRef>,
+    pub sources: Vec<TrackSource>,
     pub available: bool,
     /// When it was liked/added (library and playlist views), Unix seconds.
     pub added_at: Option<i64>,

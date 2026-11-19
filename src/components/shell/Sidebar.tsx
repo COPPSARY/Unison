@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Disc3,
+  HardDrive,
   Heart,
   House,
   ListMusic,
@@ -32,6 +33,7 @@ const LIBRARY: NavItem[] = [
   { to: "/library/albums", label: strings.nav.albums, icon: Disc3 },
   { to: "/library/playlists", label: strings.nav.playlists, icon: ListMusic },
   { to: "/library/artists", label: strings.nav.artists, icon: MicVocal },
+  { to: "/library/local", label: strings.nav.local, icon: HardDrive },
 ];
 
 /** Finder-style row: accent-tinted icon, primary label, grey rounded fill when selected. */

@@ -17,7 +17,7 @@
         "script-src": "'self' https://www.youtube.com https://s.ytimg.com",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self'",
-        "img-src": "'self' data: https://i.scdn.co https://*.spotifycdn.com https://i.ytimg.com https://*.ggpht.com https://yt3.googleusercontent.com https://lastfm.freetls.fastly.net",
+        "img-src": "'self' data: artwork: http://artwork.localhost https://artwork.localhost https://i.scdn.co https://*.spotifycdn.com https://i.ytimg.com https://*.ggpht.com https://yt3.googleusercontent.com https://lastfm.freetls.fastly.net",
         "frame-src": "https://www.youtube-nocookie.com https://www.youtube.com",
         "connect-src": "ipc: http://ipc.localhost"
       }

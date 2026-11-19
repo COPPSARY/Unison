@@ -2,8 +2,10 @@
 //! Files are referenced in place and only ever read; tags are never modified.
 
 pub mod artwork;
+pub mod copy;
 pub mod fingerprint;
 pub mod import;
+pub mod jobs;
 pub mod scan;
 pub mod tags;
 #[cfg(test)]
@@ -35,6 +37,8 @@ pub enum IssueKind {
     DrmProtected,
     /// Could not be read or parsed.
     Unreadable,
+    /// Copy-on-drop: copying into the music folder failed (disk full, no permission …).
+    CopyFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
