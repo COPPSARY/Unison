@@ -1,8 +1,8 @@
 import * as RSelect from "@radix-ui/react-select";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Icon } from "./Icon";
-import { fieldBase, focusRing, overlaySurface, toneTransition } from "./styles";
+import { fieldBase, menuItem, overlayGlass, tone } from "./styles";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 
@@ -35,23 +35,22 @@ export function Select({
         aria-invalid={invalid || undefined}
         className={cn(
           fieldBase,
-          toneTransition,
-          focusRing,
-          "inline-flex items-center justify-between gap-2 data-placeholder:text-text-muted",
+          tone,
+          "inline-flex items-center justify-between gap-2 data-placeholder:text-text-tertiary",
           className,
         )}
       >
         <RSelect.Value {...(placeholder === undefined ? {} : { placeholder })} />
         <RSelect.Icon className="text-text-muted">
-          <Icon as={ChevronDown} />
+          <Icon as={ChevronsUpDown} size={12} />
         </RSelect.Icon>
       </RSelect.Trigger>
       <RSelect.Portal>
         <RSelect.Content
           position="popper"
-          sideOffset={4}
+          sideOffset={6}
           className={cn(
-            overlaySurface,
+            overlayGlass,
             "u-anim-pop z-50 max-h-(--radix-select-content-available-height)",
             "min-w-(--radix-select-trigger-width) overflow-hidden p-1",
           )}
@@ -62,16 +61,12 @@ export function Select({
                 key={o.value}
                 value={o.value}
                 {...(o.disabled === undefined ? {} : { disabled: o.disabled })}
-                className={cn(
-                  "relative flex h-8 cursor-default items-center rounded-control pr-8 pl-2",
-                  "text-sm text-text outline-none select-none data-highlighted:bg-surface",
-                  "data-disabled:text-text-disabled",
-                )}
+                className={cn(menuItem, "pr-2 pl-7")}
               >
-                <RSelect.ItemText>{o.label}</RSelect.ItemText>
-                <RSelect.ItemIndicator className="absolute right-2 text-text">
-                  <Icon as={Check} />
+                <RSelect.ItemIndicator className="absolute left-2">
+                  <Icon as={Check} size={12} />
                 </RSelect.ItemIndicator>
+                <RSelect.ItemText>{o.label}</RSelect.ItemText>
               </RSelect.Item>
             ))}
           </RSelect.Viewport>

@@ -63,6 +63,7 @@ v1.0 is done when every "In" row works for a tester who connects their own Spoti
 | Playback | YouTube via official IFrame player (mini-player + expanded video view) | In | M |
 | Playback | Unified queue mixing Spotify and YouTube items, auto-advance | In | B |
 | Playback | Media keys, Windows media overlay (SMTC) | In | B |
+| Playback | Time-synced lyrics in Now Playing (LRCLIB), plain-text fallback | In | B |
 | Matching | Same song on both platforms shown once; manual "not the same song" fix | In | M |
 | Settings | Theme (dark/light), BYOK Client ID, sync interval, clear cache, export my data | In | R |
 | System | Tray icon, start minimized option, auto-update, crash reports (opt-in) | In | B |
@@ -74,7 +75,7 @@ v1.0 is done when every "In" row works for a tester who connects their own Spoti
 
 ## 3. Screen specs
 
-Direction: minimal, dark-first, one violet accent, monochrome line icons (no bright icons on tinted backgrounds), hover by tone only. Tokens and rules are in the Plan tab's brand section; components must use role tokens, never raw hex.
+Direction: Apple-inspired glass, dark-first (see `docs/decisions/0002-apple-inspired-glass-design.md`, which supersedes the Plan tab's colour/type/shape/motion sections). Opaque content layer; glass control layer (title bar, sidebar, player bar, menus, sheets, toasts) over a Windows 11 Mica backdrop. One accent that adapts to the current artwork (violet fallback), label/fill tiers, Inter with optical sizing, capsule controls, concentric radii, spring motion, monochrome line icons, hover by tone only. Components must use role tokens, never raw hex. Pixel values below (sidebar width, row height, radii) may be adjusted to the glass layout as long as the structure stays.
 
 ### Shell (every screen)
 
@@ -113,6 +114,8 @@ Cover grid (image is the identifier): 180 px tiles, 1:1 covers, artists circular
 ### Now playing (expanded)
 
 For YouTube: the video at 16:9 in the content area with title and channel below; the IFrame player is the visual. For Spotify: large cover (max 480 px) with title, artist, album. Queue in a 320 px right panel.
+
+Background: a slow-moving ambient blur built from the artwork's colours (static under reduced motion). Lyrics panel (T-45) toggles in place of the queue: the current line in `text`, others in `text-tertiary`, auto-scrolls with a smooth spring; clicking a line seeks; "Lyrics not available" empty state; small "Lyrics: LRCLIB" credit.
 
 ### Accounts & BYOK onboarding
 
@@ -284,6 +287,10 @@ Base URLs: Spotify `https://api.spotify.com/v1`, YouTube `https://www.googleapis
 **Music filter** (`music_filter.rs`): keep a video if any of: `categoryId == 10`; channel title ends with " - Topic"; channel name contains "VEVO"; or it sits in a playlist the user has marked "Music playlist" in Unison (the API can't tell YouTube Music playlists apart). Everything else stays out of the music library but is still visible inside the user's own playlists.
 
 **Rules:** duration parsed from ISO-8601 (`PT3M42S`); skip items where `status.embeddable == false` (mark unavailable); "Deleted video" / "Private video" titles → unavailable. Use ETags with `If-None-Match`. Track quota locally per Pacific-time day (`quota.rs`); refuse non-essential calls above 90% of the daily budget. Refresh any stored YouTube data older than 30 days or delete it.
+
+### LRCLIB (lyrics)
+
+`GET https://lrclib.net/api/get?track_name=…&artist_name=…&album_name=…&duration=…` (seconds) returns `syncedLyrics` (LRC `[mm:ss.xx] line`) and/or `plainLyrics`; 404 when unknown. No key; send a `User-Agent` naming the app and version (no user data). Cache per track 30 days in `cache_kv`; fetch only when Now Playing lyrics are shown or prefetch the next queue item. Verify against the live docs at lrclib.net/docs before implementing.
 
 ### Last.fm (recommendations)
 
@@ -476,6 +483,7 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 | T-01 | Scaffold Tauri 2 + React 19 + TS strict + Vite + Tailwind v4 + pnpm; repo layout from section 4; `CLAUDE.md`, `docs/PROGRESS.md` | H1, H2 | `pnpm tauri dev` opens a window; lint/typecheck/test scripts exist and pass |
 | T-02 | CI workflow: lint, typecheck, clippy, tests on windows-latest, macos-latest, ubuntu-latest; build artifacts | T-01 | Green on all three OSes |
 | T-03 | Design tokens (`tokens.css`, dark + light), fonts bundled, base UI kit: Button, IconButton, Input, Select, Segmented, Menu, Dialog, Drawer, Tooltip, Toast, Skeleton, Banner | T-01 | Storybook-style `/dev/ui` route shows every component in every state; hover is tone-only; no bright icon on tinted background anywhere |
+| T-03a | Apple-inspired redesign (ADR 0002): glass materials + Mica window backdrop with Windows 10 fallback, label/fill tokens, adaptive accent helper with contrast correction, Inter type scale, spring easings, kit restyled (capsules, concentric radii, glass overlays) | T-03 | `/dev/ui` shows glass over artwork, accent swatches adapting, every component in both themes; reduced transparency/motion fallbacks work; tests for spring + accent maths |
 | T-04 | Shell: custom title bar, sidebar (collapsing), routes with empty pages, player bar placeholder, keyboard shortcuts | T-03 | All routes reachable by mouse and keyboard; window state persists |
 | T-05 | Rust core: `AppError`, `tracing` with redaction, SQLite pool + migration 0001, tauri-specta bindings generation | T-01 | Bindings regenerate on build; DB file created; migration test passes |
 | T-06 | `MusicProvider` trait, models, settings commands, single-instance plugin | T-05 | `settings_get/set` round-trip from UI |
@@ -520,6 +528,7 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 | T-42 | Player bar wired to both; like toggle; expanded Now Playing view | T-40, T-41 | Controls work for both sources |
 | T-43 | Unified queue + auto-advance + routing + preferred source setting | T-42 | Mixed queue of 10 items plays through without manual action |
 | T-44 | Media keys + Windows SMTC overlay | T-43 | Keyboard media keys and Win overlay control playback |
+| T-45 | Lyrics: LRCLIB client + cache, LRC parser, Now Playing lyrics panel with live line highlight and click-to-seek | T-43 | Parser unit tests; fixture tests for 200/404; lyrics follow playback for both sources |
 
 ### Phase 5 — Recommendations
 
@@ -544,7 +553,7 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 | ID | Task | Needs | Done when |
 | --- | --- | --- | --- |
 | T-70 | Add/remove tracks on owned Spotify playlists; like/unlike sync to source | T-42 | Changes appear in Spotify and YouTube within one sync |
-| T-71 | Settings complete: theme, sync interval, preferred source, export, wipe | T-16 | Export JSON opens; wipe returns app to first run |
+| T-71 | Settings complete: theme, window material (Mica / Acrylic / Off) + glass intensity, sync interval, preferred source, export, wipe | T-16 | Export JSON opens; wipe returns app to first run; material change applies live |
 | T-72 | Light theme pass + contrast audit (4.5:1 text, 3:1 controls) + reduced motion | T-03 | Automated contrast check passes; greyscale review done |
 | T-73 | Khmer-ready: font fallback (Noto Sans Khmer), line height, all strings in `en.json`, `km.json` stub | T-03 | Khmer titles render without clipping |
 | T-74 | Performance + memory pass against section 10 budgets | all | All budgets met on a mid-range Windows laptop |
@@ -560,7 +569,7 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 - **Release flow:** push tag `vX.Y.Z` → CI builds, signs, uploads installer + `latest.json` to a draft GitHub Release → owner runs `docs/MANUAL_TESTS.md` on the draft → publish.
 - **Release notes:** generated from conventional commits, edited by the owner; written for users ("YouTube playlists now load twice as fast"), not commit messages.
 - **Channels:** `beta` and `stable` update feeds; testers on beta.
-- **Before 1.0:** Google OAuth verification approved (H11), privacy policy live (H8), Spotify and YouTube branding checked against their current guidelines.
+- **Before 1.0:** Google OAuth verification approved (H11), privacy policy live (H8), Spotify and YouTube branding checked against their current guidelines, lyrics licensing reviewed (LRCLIB is community-sourced), no Apple trade dress or assets in the UI.
 
 ## 13. CLAUDE.md (put in repo root)
 

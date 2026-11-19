@@ -2,6 +2,7 @@ export { Banner } from "./Banner";
 export { Button } from "./Button";
 export { Dialog, DialogClose, DialogContent, DialogTrigger } from "./Dialog";
 export { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from "./Drawer";
+export { GlassFilters } from "./GlassFilters";
 export { Icon } from "./Icon";
 export { IconButton } from "./IconButton";
 export { Input } from "./Input";

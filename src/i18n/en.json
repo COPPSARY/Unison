@@ -14,7 +14,8 @@
     "filter": "Filter",
     "sort": "Sort",
     "source": "Source",
-    "more": "More"
+    "more": "More",
+    "ok": "OK"
   },
   "source": {
     "all": "All",
@@ -77,7 +78,7 @@
     "light": "Light",
     "colors": "Colour tokens",
     "typography": "Typography",
-    "display": "Space Grotesk display",
+    "display": "Inter display with optical sizing",
     "body": "Inter body text for track names, settings and dialogs.",
     "buttons": "Button",
     "iconButtons": "IconButton",
@@ -107,6 +108,23 @@
     "showToast": "Show toast",
     "showUndoToast": "Toast with Undo",
     "showErrorToast": "Error toast",
-    "back": "Back to app"
+    "back": "Back to app",
+    "materials": "Materials",
+    "regular": "Regular",
+    "thick": "Thick",
+    "clear": "Clear",
+    "lens": "Lens",
+    "frost": "Glass frost",
+    "accent": "Accent from artwork",
+    "noArtwork": "No artwork",
+    "presetCrimson": "Crimson cover",
+    "presetTeal": "Teal cover",
+    "presetAmber": "Amber cover",
+    "presetBlue": "Blue cover",
+    "presetGrey": "Greyscale cover",
+    "sampleTitle": "Sample track",
+    "sampleArtist": "Sample artist",
+    "glassButton": "Glass",
+    "large": "Large"
   }
 }

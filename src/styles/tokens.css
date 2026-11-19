@@ -1,50 +1,142 @@
-/* Role tokens (Plan: Brand guidelines → Color). Components use these, never raw hex. */
+/*
+ * Role tokens (ADR 0002 — Apple-inspired glass). Components use these, never raw hex.
+ * Accent variables are overwritten at runtime by src/lib/accent.ts (artwork-adaptive).
+ */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --accent: #8b70ff;
-  --accent-foreground: #ffffff;
-  --background: #0f0f14;
-  --surface: #16161d;
-  --surface-raised: #1e1e27;
-  --border: #2a2a35;
-  --border-strong: #3a3a48;
-  --text: #ecebf3;
-  --text-muted: #9a98ad;
-  --text-disabled: #5c5a6e;
-  --success: #4fbf7f;
-  --warning: #e0a84b;
-  --danger: #ef6a6a;
-  --scrim: rgb(0 0 0 / 0.55);
-  --overlay-shadow: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 0 1px var(--border);
 
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration-hover: 120ms;
-  --duration-base: 200ms;
+  /* Accent (fallback violet) */
+  --accent: rgb(139 112 255);
+  --accent-rgb: 139 112 255;
+  --accent-foreground: rgb(255 255 255);
+
+  /* Content layer */
+  --background: rgb(18 18 22);
+  --surface: rgb(28 28 33);
+  --surface-raised: rgb(38 38 44);
+
+  /* Labels */
+  --text: rgb(255 255 255 / 0.92);
+  --text-muted: rgb(235 235 245 / 0.62);
+  --text-tertiary: rgb(235 235 245 / 0.38);
+  --text-disabled: rgb(235 235 245 / 0.24);
+
+  /* Fills (control backgrounds), strongest to weakest */
+  --fill: rgb(120 120 128 / 0.32);
+  --fill-secondary: rgb(120 120 128 / 0.24);
+  --fill-tertiary: rgb(120 120 128 / 0.18);
+  --fill-quaternary: rgb(120 120 128 / 0.12);
+  --thumb: rgb(255 255 255 / 0.16);
+
+  /* Separators */
+  --border: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.14);
+
+  /* Status */
+  --success: rgb(62 207 122);
+  --warning: rgb(240 180 76);
+  --danger: rgb(255 107 107);
+
+  /* Glass: tint alpha and blur scale with --glass-frost (0..1, user setting in T-71) */
+  --glass-frost: 0.5;
+  --glass-rgb: 34 34 40;
+  --glass-regular: rgb(var(--glass-rgb) / calc(0.42 + 0.3 * var(--glass-frost)));
+  --glass-thick: rgb(var(--glass-rgb) / calc(0.68 + 0.22 * var(--glass-frost)));
+  --glass-clear: rgb(var(--glass-rgb) / calc(0.08 + 0.2 * var(--glass-frost)));
+  --glass-blur: calc(12px + 28px * var(--glass-frost));
+  --glass-rim:
+    inset 0 1px 0 rgb(255 255 255 / 0.14), inset 0 -1px 0 rgb(255 255 255 / 0.03),
+    inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  --glass-shadow: 0 12px 32px rgb(0 0 0 / 0.36), 0 2px 6px rgb(0 0 0 / 0.2);
+
+  --scrim: rgb(0 0 0 / 0.42);
+  --focus-ring: 0 0 0 3px rgb(var(--accent-rgb) / 0.5);
+
+  /* Motion fallbacks until src/lib/spring.ts installs the real springs */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring-smooth: var(--ease);
+  --spring-smooth-duration: 400ms;
+  --spring-snappy: var(--ease);
+  --spring-snappy-duration: 300ms;
+  --duration-tone: 150ms;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --accent: #6a4df5;
-  --accent-foreground: #ffffff;
-  --background: #fafafc;
-  --surface: #ffffff;
-  --surface-raised: #f3f3f7;
-  --border: #e4e4eb;
-  --border-strong: #cfcfda;
-  --text: #16161d;
-  --text-muted: #5e5c70;
-  --text-disabled: #a3a1b3;
-  --success: #1f8a4c;
-  --warning: #9a6a12;
-  --danger: #c23434;
-  --scrim: rgb(22 22 29 / 0.4);
-  --overlay-shadow: 0 8px 24px rgb(22 22 29 / 0.12), 0 0 0 1px var(--border);
+
+  --accent: rgb(106 77 245);
+  --accent-rgb: 106 77 245;
+  --accent-foreground: rgb(255 255 255);
+
+  --background: rgb(244 244 246);
+  --surface: rgb(255 255 255);
+  --surface-raised: rgb(236 236 240);
+
+  --text: rgb(0 0 0 / 0.88);
+  --text-muted: rgb(60 60 67 / 0.68);
+  --text-tertiary: rgb(60 60 67 / 0.44);
+  --text-disabled: rgb(60 60 67 / 0.28);
+
+  --fill: rgb(118 118 128 / 0.2);
+  --fill-secondary: rgb(118 118 128 / 0.16);
+  --fill-tertiary: rgb(118 118 128 / 0.12);
+  --fill-quaternary: rgb(118 118 128 / 0.08);
+  --thumb: rgb(255 255 255 / 1);
+
+  --border: rgb(0 0 0 / 0.08);
+  --border-strong: rgb(0 0 0 / 0.14);
+
+  --success: rgb(31 138 76);
+  --warning: rgb(154 106 18);
+  --danger: rgb(198 47 47);
+
+  --glass-rgb: 252 252 254;
+  --glass-regular: rgb(var(--glass-rgb) / calc(0.5 + 0.3 * var(--glass-frost)));
+  --glass-thick: rgb(var(--glass-rgb) / calc(0.74 + 0.2 * var(--glass-frost)));
+  --glass-clear: rgb(var(--glass-rgb) / calc(0.12 + 0.22 * var(--glass-frost)));
+  --glass-rim:
+    inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 -1px 0 rgb(0 0 0 / 0.03),
+    inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  --glass-shadow: 0 12px 32px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
+
+  --scrim: rgb(0 0 0 / 0.2);
+}
+
+/* Windows 11 Mica / Acrylic: let the native backdrop show through the content layer a little. */
+:root[data-material="mica"][data-theme="dark"],
+:root[data-material="acrylic"][data-theme="dark"] {
+  --background: rgb(18 18 22 / 0.7);
+}
+:root[data-material="mica"][data-theme="light"],
+:root[data-material="acrylic"][data-theme="light"] {
+  --background: rgb(244 244 246 / 0.72);
+}
+
+/* Reduced transparency (system) or material "off": every glass surface becomes opaque. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-regular: var(--surface-raised);
+    --glass-thick: var(--surface-raised);
+    --glass-clear: var(--surface-raised);
+    --glass-blur: 0px;
+  }
+  :root[data-material] {
+    --background: rgb(18 18 22);
+  }
+  :root[data-material][data-theme="light"] {
+    --background: rgb(244 244 246);
+  }
+}
+:root[data-material="off"] {
+  --glass-regular: var(--surface-raised);
+  --glass-thick: var(--surface-raised);
+  --glass-clear: var(--surface-raised);
+  --glass-blur: 0px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --duration-hover: 0ms;
-    --duration-base: 0ms;
+    --duration-tone: 0ms;
   }
 }

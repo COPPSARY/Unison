@@ -17,10 +17,10 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
       <RTooltip.Portal>
         <RTooltip.Content
           side={side}
-          sideOffset={6}
+          sideOffset={8}
           className={cn(
-            "u-anim-pop z-50 max-w-64 rounded-control bg-surface-raised px-2 py-1",
-            "text-xs text-text shadow-overlay",
+            "glass-thick u-anim-pop z-50 max-w-64 rounded-[10px] px-2.5 py-1.5",
+            "text-callout text-text",
           )}
         >
           {content}

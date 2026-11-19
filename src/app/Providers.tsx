@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Toaster, TooltipProvider } from "@/components/ui";
+import { GlassFilters, Toaster, TooltipProvider } from "@/components/ui";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <TooltipProvider delayDuration={400}>
+    <TooltipProvider delayDuration={500}>
+      <GlassFilters />
       <Toaster>{children}</Toaster>
     </TooltipProvider>
   );

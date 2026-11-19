@@ -13,6 +13,13 @@ Acceptance criteria:
 
 ## Done
 
+- **T-03a — Apple-inspired redesign** (2026-11-19, ADR 0002): main window built in Rust with
+  Mica on Windows 11 (opaque fallback; `UNISON_MATERIAL=acrylic|off` override until T-71);
+  label/fill/glass tokens with reduced-transparency fallback; artwork-adaptive accent with
+  contrast correction; spring easings via CSS linear(); Inter-only type scale; kit restyled
+  (capsules, glass overlays, sliding segmented thumb, floating sheet); /dev/ui materials stage,
+  accent presets and frost slider. 30 Vitest + 6 Rust tests; all checks green.
+
 - **T-03 — Design tokens + UI kit** (2026-11-19): role tokens (dark + light), bundled Inter /
   Space Grotesk / JetBrains Mono, Radix-based Button, IconButton, Input, Select, Segmented, Menu,
   Dialog, Drawer, Tooltip, Toast, Skeleton, Banner; `/dev/ui` gallery (dev builds only) with

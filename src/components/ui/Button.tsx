@@ -1,21 +1,26 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/cn";
-import { focusRing, toneTransition } from "./styles";
+import { pressable } from "./styles";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md";
+export type ButtonVariant = "primary" | "secondary" | "glass" | "ghost" | "danger";
+export type ButtonSize = "sm" | "md" | "lg";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-foreground hover:bg-accent/90",
-  secondary:
-    "border border-border-strong bg-surface text-text hover:bg-surface-raised",
-  ghost: "text-text-muted hover:bg-surface-raised hover:text-text",
-  danger: "border border-border-strong bg-surface text-danger hover:bg-surface-raised",
+  /** The one prominent action: accent capsule. */
+  primary: "bg-accent text-accent-foreground hover:brightness-110",
+  /** Default bordered-style capsule on a fill. */
+  secondary: "bg-fill-secondary text-text hover:bg-fill",
+  /** Over artwork or other rich backgrounds. */
+  glass: "glass-clear glass-flat text-text hover:bg-fill-tertiary",
+  /** Borderless. */
+  ghost: "text-text-muted hover:bg-fill-tertiary hover:text-text",
+  danger: "bg-fill-secondary text-danger hover:bg-fill",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "h-7 gap-1 px-2 text-xs",
-  md: "h-8 gap-2 px-3 text-sm",
+  sm: "h-7 gap-1 px-3 text-callout",
+  md: "h-8 gap-1.5 px-4 text-body",
+  lg: "h-10 gap-2 px-5 text-title3 font-semibold",
 };
 
 export type ButtonProps = ComponentProps<"button"> & {
@@ -34,10 +39,9 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-control font-medium select-none",
-        "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40",
-        toneTransition,
-        focusRing,
+        "inline-flex shrink-0 items-center justify-center rounded-full font-medium select-none",
+        "disabled:pointer-events-none disabled:opacity-40",
+        pressable,
         variants[variant],
         sizes[size],
         className,

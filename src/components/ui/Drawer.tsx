@@ -18,7 +18,7 @@ export type DrawerContentProps = {
   footer?: ReactNode;
 };
 
-/** Right-side panel for multi-step flows (e.g. Spotify BYOK onboarding). */
+/** Floating glass sheet inset from the window edge (e.g. Spotify BYOK onboarding). */
 export function DrawerContent({ title, description, children, footer }: DrawerContentProps) {
   return (
     <RDialog.Portal>
@@ -26,29 +26,25 @@ export function DrawerContent({ title, description, children, footer }: DrawerCo
       <RDialog.Content
         {...(description ? {} : { "aria-describedby": undefined })}
         className={cn(
-          "u-anim-drawer fixed top-0 right-0 bottom-0 z-50 flex w-[min(420px,100vw)] flex-col",
-          "border-l border-border bg-surface shadow-overlay focus-visible:outline-none",
+          "glass-thick u-anim-sheet fixed top-3 right-3 bottom-3 z-50 flex w-[min(400px,calc(100vw-24px))]",
+          "flex-col overflow-hidden rounded-sheet text-text",
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
           <div>
-            <RDialog.Title className="font-display text-base font-medium text-text">
-              {title}
-            </RDialog.Title>
+            <RDialog.Title className="text-title2">{title}</RDialog.Title>
             {description ? (
-              <RDialog.Description className="mt-1 text-sm text-text-muted">
+              <RDialog.Description className="mt-1 text-callout text-text-muted">
                 {description}
               </RDialog.Description>
             ) : null}
           </div>
           <RDialog.Close asChild>
-            <IconButton label={strings.common.close} size="sm" icon={<Icon as={X} />} className="-mr-2" />
+            <IconButton label={strings.common.close} size="sm" icon={<Icon as={X} />} className="-mr-1" />
           </RDialog.Close>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
-        {footer ? (
-          <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>
-        ) : null}
+        <div className="flex-1 overflow-y-auto px-5 py-3">{children}</div>
+        {footer ? <div className="flex justify-end gap-2 px-5 pt-3 pb-5">{footer}</div> : null}
       </RDialog.Content>
     </RDialog.Portal>
   );

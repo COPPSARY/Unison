@@ -17,24 +17,22 @@ export type BannerProps = {
   onDismiss?: () => void;
 };
 
-const edge: Record<BannerTone, string> = {
-  info: "border-l-border-strong",
-  warning: "border-l-warning",
-  danger: "border-l-danger",
+const dot: Record<BannerTone, string> = {
+  info: "bg-text-tertiary",
+  warning: "bg-warning",
+  danger: "bg-danger",
 };
 
-/** App-wide problem strip: offline, quota exhausted, token expired. */
+/** App-wide problem strip (offline, quota exhausted, token expired): a floating glass capsule. */
 export function Banner({ tone = "info", children, action, icon, onDismiss }: BannerProps) {
   return (
     <div
       role={tone === "info" ? "status" : "alert"}
-      className={cn(
-        "flex min-h-10 items-center gap-3 border-b border-l-2 border-b-border bg-surface px-4 py-2",
-        edge[tone],
-      )}
+      className="glass flex min-h-10 items-center gap-3 rounded-full py-1 pr-1.5 pl-4"
     >
+      <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", dot[tone])} />
       {icon ? <span className="text-text-muted">{icon}</span> : null}
-      <p className="flex-1 text-sm text-text">{children}</p>
+      <p className="flex-1 text-body text-text">{children}</p>
       {action}
       {onDismiss ? (
         <IconButton label={strings.common.dismiss} size="sm" icon={<Icon as={X} />} onClick={onDismiss} />

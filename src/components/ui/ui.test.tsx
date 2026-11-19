@@ -1,12 +1,12 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Play } from "lucide-react";
-import { strings } from "@/i18n";
 import { useToastStore } from "@/stores/toast";
 import {
   Banner,
   Button,
   Dialog,
+  DialogClose,
   DialogContent,
   DialogTrigger,
   Icon,
@@ -42,6 +42,12 @@ describe("Button", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "X" }));
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("is a capsule with spring press feedback", () => {
+    render(<Button>A</Button>);
+    expect(screen.getByRole("button").className).toMatch(/rounded-full/);
+    expect(screen.getByRole("button").className).toMatch(/u-press/);
   });
 
   it("never translates or shadows on hover", () => {
@@ -106,18 +112,30 @@ describe("Menu", () => {
 });
 
 describe("Dialog", () => {
-  it("opens from its trigger and closes with the close button", async () => {
+  it("opens from its trigger and closes with Cancel or Escape", async () => {
     render(
       <Dialog>
         <DialogTrigger asChild>
           <Button>Open</Button>
         </DialogTrigger>
-        <DialogContent title="Disconnect Spotify?" description="Nothing changes on Spotify." />
+        <DialogContent
+          title="Disconnect Spotify?"
+          description="Nothing changes on Spotify."
+          footer={
+            <DialogClose asChild>
+              <Button>Cancel</Button>
+            </DialogClose>
+          }
+        />
       </Dialog>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByRole("dialog", { name: "Disconnect Spotify?" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: strings.common.close }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+    await screen.findByRole("dialog");
+    await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

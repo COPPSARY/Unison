@@ -13,7 +13,7 @@ describe("routes", () => {
     const s = strings.devUi;
     expect(screen.getByRole("heading", { level: 1, name: s.title })).toBeInTheDocument();
     for (const title of [
-      s.colors, s.typography, s.buttons, s.iconButtons, s.inputs, s.selects, s.segmented,
+      s.materials, s.colors, s.typography, s.buttons, s.iconButtons, s.inputs, s.selects, s.segmented,
       s.menu, s.dialog, s.drawer, s.tooltip, s.toast, s.skeleton, s.banner,
     ]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();

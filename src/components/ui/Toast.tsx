@@ -7,7 +7,6 @@ import { useToastStore, type ToastItem } from "@/stores/toast";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
-import { overlaySurface } from "./styles";
 
 const DURATION_MS = 5000;
 
@@ -22,23 +21,23 @@ export function ToastCard({
     <RToast.Root
       duration={DURATION_MS}
       {...(onOpenChange ? { onOpenChange } : {})}
-      className={cn(overlaySurface, "u-anim-toast flex w-80 items-start gap-3 p-3")}
+      className="glass-thick u-anim-toast flex w-80 items-center gap-3 rounded-panel py-2.5 pr-2 pl-4"
     >
       <div className="min-w-0 flex-1">
         <RToast.Title
-          className={cn("text-sm font-medium", item.tone === "danger" ? "text-danger" : "text-text")}
+          className={cn("text-headline", item.tone === "danger" ? "text-danger" : "text-text")}
         >
           {item.title}
         </RToast.Title>
         {item.description ? (
-          <RToast.Description className="mt-1 text-sm text-text-muted">
+          <RToast.Description className="mt-0.5 text-callout text-text-muted">
             {item.description}
           </RToast.Description>
         ) : null}
       </div>
       {item.action ? (
         <RToast.Action altText={item.action.label} asChild>
-          <Button size="sm" variant="ghost" onClick={item.action.onAction}>
+          <Button size="sm" variant="secondary" onClick={item.action.onAction}>
             {item.action.label}
           </Button>
         </RToast.Action>
@@ -50,7 +49,7 @@ export function ToastCard({
   );
 }
 
-/** Mount once at the app root. Toasts sit bottom-right, above the 72 px player bar. */
+/** Mount once at the app root. Toasts float bottom-right, above the player bar. */
 export function Toaster({ children }: { children?: ReactNode }) {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
@@ -60,7 +59,7 @@ export function Toaster({ children }: { children?: ReactNode }) {
       {toasts.map((t) => (
         <ToastCard key={t.id} item={t} onOpenChange={(open) => !open && dismiss(t.id)} />
       ))}
-      <RToast.Viewport className="fixed right-4 bottom-[88px] z-50 flex flex-col gap-2 outline-none" />
+      <RToast.Viewport className="fixed right-4 bottom-24 z-50 flex flex-col gap-2 outline-none" />
     </RToast.Provider>
   );
 }

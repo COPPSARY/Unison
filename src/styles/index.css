@@ -1,30 +1,73 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 @theme inline {
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
+  --color-text-tertiary: var(--text-tertiary);
   --color-text-disabled: var(--text-disabled);
+  --color-fill: var(--fill);
+  --color-fill-secondary: var(--fill-secondary);
+  --color-fill-tertiary: var(--fill-tertiary);
+  --color-fill-quaternary: var(--fill-quaternary);
+  --color-thumb: var(--thumb);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-scrim: var(--scrim);
-  --font-sans: "Inter Variable", "Noto Sans Khmer", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-  --font-display: "Space Grotesk Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", monospace;
-  --radius-control: 6px;
-  --radius-panel: 8px;
-  --shadow-overlay: var(--overlay-shadow);
+
+  --font-sans: "Inter Variable", "Noto Sans Khmer", "Segoe UI Variable", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Concentric radii: inner = outer - padding. */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --radius-sheet: 20px;
+
+  --shadow-glass: var(--glass-shadow);
   --ease-out: var(--ease);
+
+  /* Type scale (Inter, Apple-like dynamic tracking: -0.0223 + 0.185 * e^(-0.1745 * size)). */
+  --text-large-title: 28px;
+  --text-large-title--line-height: 34px;
+  --text-large-title--letter-spacing: -0.021em;
+  --text-large-title--font-weight: 700;
+  --text-title1: 22px;
+  --text-title1--line-height: 28px;
+  --text-title1--letter-spacing: -0.018em;
+  --text-title1--font-weight: 700;
+  --text-title2: 18px;
+  --text-title2--line-height: 24px;
+  --text-title2--letter-spacing: -0.014em;
+  --text-title2--font-weight: 600;
+  --text-title3: 15px;
+  --text-title3--line-height: 20px;
+  --text-title3--letter-spacing: -0.009em;
+  --text-title3--font-weight: 600;
+  --text-headline: 13px;
+  --text-headline--line-height: 18px;
+  --text-headline--letter-spacing: -0.003em;
+  --text-headline--font-weight: 600;
+  --text-body: 13px;
+  --text-body--line-height: 18px;
+  --text-body--letter-spacing: -0.003em;
+  --text-callout: 12px;
+  --text-callout--line-height: 16px;
+  --text-callout--letter-spacing: 0em;
+  --text-footnote: 11px;
+  --text-footnote--line-height: 14px;
+  --text-footnote--letter-spacing: 0.005em;
+  --text-caption: 10px;
+  --text-caption--line-height: 13px;
+  --text-caption--letter-spacing: 0.01em;
 }
 
 html,
@@ -33,85 +76,236 @@ body,
   height: 100%;
 }
 
+html {
+  background: transparent;
+}
+
 body {
   margin: 0;
   background: var(--background);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.003em;
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11" 0;
   -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
-/* Motion: opacity + 4–8 px offsets, 120–200 ms, no bounce, nothing loops (except shimmer). */
+/* ---------------------------------------------------------------- Glass materials */
+
+.glass,
+.glass-thick,
+.glass-clear {
+  background: var(--glass-regular);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+}
+.glass-thick {
+  background: var(--glass-thick);
+}
+.glass-clear {
+  background: var(--glass-clear);
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.4)) saturate(1.6) brightness(1.05);
+}
+/* Flat variant for chrome that sits on the window edge (no drop shadow). */
+.glass-flat {
+  box-shadow: var(--glass-rim);
+}
+/* Lens: refracts the backdrop at the edges (Chromium/WebView2). Small hero controls only. */
+.glass-lens {
+  backdrop-filter: url(#u-lens) blur(calc(var(--glass-blur) * 0.25)) saturate(1.8);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-thick,
+  .glass-clear,
+  .glass-lens {
+    backdrop-filter: none;
+  }
+}
+:root[data-material="off"] :is(.glass, .glass-thick, .glass-clear, .glass-lens) {
+  backdrop-filter: none;
+}
+
+/* ---------------------------------------------------------------- Interaction */
+
+/* Hover is a tone change; press scales with the snappy spring. */
+.u-tone {
+  transition:
+    background-color var(--duration-tone) var(--ease),
+    color var(--duration-tone) var(--ease),
+    box-shadow var(--duration-tone) var(--ease);
+}
+.u-press {
+  transition:
+    background-color var(--duration-tone) var(--ease),
+    color var(--duration-tone) var(--ease),
+    box-shadow var(--duration-tone) var(--ease),
+    transform var(--spring-snappy-duration) var(--spring-snappy);
+}
+.u-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ---------------------------------------------------------------- Motion (springs) */
+
 @keyframes u-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
 }
 @keyframes u-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  to {
+    opacity: 0;
+  }
 }
 @keyframes u-pop-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
 }
-@keyframes u-scale-in {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.98); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+@keyframes u-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
 }
-@keyframes u-drawer-in {
-  from { opacity: 0; transform: translateX(8px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes u-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes u-dialog-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+}
+@keyframes u-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes u-sheet-out {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
 }
 @keyframes u-toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
 }
 @keyframes u-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
-.u-anim-overlay[data-state="open"] { animation: u-fade-in var(--duration-base) var(--ease); }
-.u-anim-overlay[data-state="closed"] { animation: u-fade-out var(--duration-hover) var(--ease); }
+.u-anim-overlay[data-state="open"] {
+  animation: u-fade-in var(--spring-smooth-duration) var(--spring-smooth);
+}
+.u-anim-overlay[data-state="closed"] {
+  animation: u-fade-out 160ms var(--ease) forwards;
+}
+.u-anim-pop {
+  transform-origin: var(
+    --radix-dropdown-menu-content-transform-origin,
+    var(--radix-select-content-transform-origin, var(--radix-tooltip-content-transform-origin))
+  );
+}
 .u-anim-pop[data-state="open"],
 .u-anim-pop[data-state="delayed-open"],
-.u-anim-pop[data-state="instant-open"] { animation: u-pop-in var(--duration-hover) var(--ease); }
-.u-anim-pop[data-state="closed"] { animation: u-fade-out var(--duration-hover) var(--ease); }
-.u-anim-dialog[data-state="open"] { animation: u-scale-in var(--duration-base) var(--ease); }
-.u-anim-dialog[data-state="closed"] { animation: u-fade-out var(--duration-hover) var(--ease); }
-.u-anim-drawer[data-state="open"] { animation: u-drawer-in var(--duration-base) var(--ease); }
-.u-anim-drawer[data-state="closed"] { animation: u-fade-out var(--duration-hover) var(--ease); }
-.u-anim-toast[data-state="open"] { animation: u-toast-in var(--duration-base) var(--ease); }
-.u-anim-toast[data-state="closed"] { animation: u-fade-out var(--duration-hover) var(--ease); }
+.u-anim-pop[data-state="instant-open"] {
+  animation: u-pop-in var(--spring-snappy-duration) var(--spring-snappy);
+}
+.u-anim-pop[data-state="closed"] {
+  animation: u-pop-out 140ms var(--ease) forwards;
+}
+.u-anim-dialog[data-state="open"] {
+  animation: u-dialog-in var(--spring-snappy-duration) var(--spring-snappy);
+}
+.u-anim-dialog[data-state="closed"] {
+  animation: u-dialog-out 160ms var(--ease) forwards;
+}
+.u-anim-sheet[data-state="open"] {
+  animation: u-sheet-in var(--spring-smooth-duration) var(--spring-smooth);
+}
+.u-anim-sheet[data-state="closed"] {
+  animation: u-sheet-out 180ms var(--ease) forwards;
+}
+.u-anim-toast[data-state="open"] {
+  animation: u-toast-in var(--spring-snappy-duration) var(--spring-snappy);
+}
+.u-anim-toast[data-state="closed"] {
+  animation: u-fade-out 160ms var(--ease) forwards;
+}
 
 .u-skeleton {
   background: linear-gradient(
     90deg,
-    var(--surface-raised) 0%,
-    var(--border) 50%,
-    var(--surface-raised) 100%
+    var(--fill-quaternary) 0%,
+    var(--fill-secondary) 50%,
+    var(--fill-quaternary) 100%
   );
   background-size: 200% 100%;
-  animation: u-shimmer 1.6s linear infinite;
+  animation: u-shimmer 1.8s linear infinite;
 }
 
+/* Reduced motion: crossfades only. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .u-press:active:not(:disabled) {
+    transform: none;
+  }
+  .u-anim-pop[data-state],
+  .u-anim-dialog[data-state],
+  .u-anim-sheet[data-state],
+  .u-anim-toast[data-state] {
+    animation-name: u-fade-in;
+    animation-duration: 120ms;
+  }
+  .u-anim-pop[data-state="closed"],
+  .u-anim-dialog[data-state="closed"],
+  .u-anim-sheet[data-state="closed"],
+  .u-anim-toast[data-state="closed"] {
+    animation-name: u-fade-out;
+  }
+  .u-anim-dialog[data-state] {
+    transform: translate(-50%, -50%);
   }
   .u-skeleton {
     animation: none;
-    background: var(--surface-raised);
+    background: var(--fill-tertiary);
   }
 }

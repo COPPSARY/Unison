@@ -24,17 +24,26 @@ The full spec is the "AI Build Spec" doc; sections are referenced as §N.
 - No unwrap()/expect() outside tests. Errors are AppError with an ErrorCode (§9).
 - SQL changes only through new files in src-tauri/migrations; never edit an applied migration.
 
-## UI rules (minimal, dark-first)
+## UI rules (Apple-inspired glass, dark-first — see docs/decisions/0002)
+- Inspiration, not imitation: no SF Pro, SF Symbols, Apple logos or copied Apple Music layouts.
 - Use role tokens from src/styles/tokens.css. No raw hex in components.
-- One accent (violet) for primary action, selection, progress and focus only.
-- Icons: lucide-react, 1.5px stroke, colour text or text-muted. Never bright-coloured icons,
-  never icons on tinted circles/squares.
-- Hover = background or text tone change, 120ms. No translate/scale/shadow on hover.
-- No gradients except album-art scrim and skeleton shimmer.
+- Two layers: opaque content; glass only on the control/navigation layer (title bar, sidebar,
+  player bar, menus, popovers, sheets, toasts) via the Glass primitives. Never glass-on-glass,
+  never glass behind long text or table rows. Reduced transparency / "Off" => opaque.
+- One accent (`--accent`, adapts to artwork, violet fallback) for primary action, selection,
+  progress and focus only. Platform colours only inside source badges.
+- Text uses label tiers (text, text-muted, text-tertiary, text-disabled); fills use fill tiers.
+- Shapes: capsule buttons/segmented/search; concentric radii; cards 12px, floating panels 16-20px.
+- Icons: lucide-react, 1.5px stroke, label colours. Never bright-coloured icons,
+  never icons on tinted circles/squares (accent-filled play capsule is the exception).
+- Hover = tone change only. Press = scale 0.97 with the snappy spring. No lift/shadow on hover.
+- Gradients only for: artwork ambient backdrop, glass rims, scrims, skeleton shimmer.
+- Motion: springs from src/lib/spring.ts (smooth by default, snappy for press/popovers), opacity
+  + small offsets/scale; nothing loops except shimmer; reduced motion => crossfade only.
+- Type: Inter only (optical sizing, tracking via the type scale classes). Numbers tabular-nums,
+  right-aligned. Spacing from the 4px scale only.
 - No subtitles that repeat a title, no greeting banners, no emoji.
-- Numbers: tabular-nums, right-aligned. Spacing from the 4px scale only.
 - Every data view has loading (skeleton), empty, no-results and error states.
-- Motion 120-200ms, cubic-bezier(0.16,1,0.3,1), no bounce, nothing loops; respect reduced motion.
 - All user-facing strings in src/i18n/en.json.
 
 ## Commands
