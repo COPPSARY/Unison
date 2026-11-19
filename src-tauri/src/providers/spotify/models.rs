@@ -53,6 +53,9 @@ pub struct TrackObj {
     #[serde(default)]
     pub is_local: bool,
     pub is_playable: Option<bool>,
+    /// `"track"` or `"episode"` (playlists can contain podcast episodes).
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -121,6 +124,14 @@ pub struct ArtistObj {
 #[derive(Debug, Clone, Deserialize)]
 pub struct FollowedArtists {
     pub artists: Paging<ArtistObj>,
+}
+
+/// One entry of `GET /playlists/{id}/items`. Feb 2026 renamed `track` → `item`; both accepted.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlaylistItem {
+    pub added_at: Option<String>,
+    #[serde(default, alias = "track")]
+    pub item: Option<TrackObj>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

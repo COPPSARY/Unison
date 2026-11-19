@@ -41,6 +41,15 @@ export const commands = {
 	libraryAlbums: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Album_Serialize[]>("library_albums", { source, sort, filter }, options),
 	libraryArtists: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Artist_Serialize[]>("library_artists", { source, sort, filter }, options),
 	playlistsList: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Playlist_Serialize[]>("playlists_list", { source, sort, filter }, options),
+	/**  Header data for a playlist. */
+	playlistGet: (playlistId: string, options?: InvokeOptions) => __TAURI_INVOKE<PlaylistDetail_Serialize>("playlist_get", { playlistId }, options),
+	/**
+	 *  Stored items in order. The first page loads them from the platform if never loaded
+	 *  (spec §5: "Local; fetches if never synced").
+	 */
+	playlistTracks: (playlistId: string, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("playlist_tracks", { playlistId, offset, limit }, options),
+	/**  Opens the playlist on its platform in the default browser. */
+	playlistOpenExternal: (playlistId: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("playlist_open_external", { playlistId }, options),
 };
 
 /** Events */
@@ -144,6 +153,37 @@ export type ListStats = {
 };
 
 export type Playlist = Playlist_Serialize | Playlist_Deserialize;
+
+/**  Playlist page header data. */
+export type PlaylistDetail = PlaylistDetail_Serialize | PlaylistDetail_Deserialize;
+
+/**  Playlist page header data. */
+export type PlaylistDetail_Deserialize = {
+	playlist: Playlist_Deserialize,
+	/**  Link back to the playlist on its platform (branding rules require it). */
+	url?: string | null,
+	/**
+	 *  False for followed Spotify playlists: the API only returns items for owned or
+	 *  collaborative playlists (Feb 2026).
+	 */
+	itemsAvailable: boolean,
+	/**  Total length of the stored items, once loaded. */
+	durationMs?: number | null,
+};
+
+/**  Playlist page header data. */
+export type PlaylistDetail_Serialize = {
+	playlist: Playlist_Serialize,
+	/**  Link back to the playlist on its platform (branding rules require it). */
+	url: string | null,
+	/**
+	 *  False for followed Spotify playlists: the API only returns items for owned or
+	 *  collaborative playlists (Feb 2026).
+	 */
+	itemsAvailable: boolean,
+	/**  Total length of the stored items, once loaded. */
+	durationMs: number | null,
+};
 
 export type Playlist_Deserialize = {
 	id: string,

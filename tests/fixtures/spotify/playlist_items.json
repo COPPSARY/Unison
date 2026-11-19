@@ -1,0 +1,66 @@
+{
+  "href": "https://api.spotify.com/v1/playlists/pl_owned/items?offset=0&limit=100",
+  "limit": 100,
+  "next": "{{BASE}}/playlists/pl_owned/items?offset=100&limit=100",
+  "offset": 0,
+  "total": 6,
+  "items": [
+    {
+      "added_at": "2024-01-01T00:00:00Z",
+      "added_by": { "id": "demo-user" },
+      "is_local": false,
+      "item": {
+        "id": "pt1",
+        "uri": "spotify:track:pt1",
+        "type": "track",
+        "name": "First song",
+        "artists": [{ "id": "a1", "name": "Demo Artist" }],
+        "album": { "id": "al1", "name": "Demo Album", "images": [] },
+        "duration_ms": 200000,
+        "external_ids": { "isrc": "USDEMO000001" },
+        "external_urls": { "spotify": "https://open.spotify.com/track/pt1" }
+      }
+    },
+    {
+      "added_at": "2024-01-02T00:00:00Z",
+      "is_local": false,
+      "item": null
+    },
+    {
+      "added_at": "2024-01-03T00:00:00Z",
+      "is_local": false,
+      "item": {
+        "id": "pt2",
+        "uri": "spotify:track:pt2",
+        "type": "track",
+        "name": "Second song",
+        "artists": [{ "id": "a2", "name": "Khmer Singer" }],
+        "duration_ms": 180000
+      }
+    },
+    {
+      "added_at": "2024-01-04T00:00:00Z",
+      "is_local": false,
+      "item": {
+        "id": "ep1",
+        "uri": "spotify:episode:ep1",
+        "type": "episode",
+        "name": "A podcast episode",
+        "duration_ms": 3600000
+      }
+    },
+    {
+      "added_at": "2024-01-05T00:00:00Z",
+      "is_local": true,
+      "item": {
+        "id": null,
+        "uri": "spotify:local:Me:Album:My+local+file:120",
+        "type": "track",
+        "name": "My local file",
+        "artists": [{ "id": null, "name": "Me" }],
+        "duration_ms": 120000,
+        "is_local": true
+      }
+    }
+  ]
+}

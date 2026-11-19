@@ -191,6 +191,20 @@ pub enum LibrarySort {
     Artist,
 }
 
+/// Playlist page header data.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistDetail {
+    pub playlist: Playlist,
+    /// Link back to the playlist on its platform (branding rules require it).
+    pub url: Option<String>,
+    /// False for followed Spotify playlists: the API only returns items for owned or
+    /// collaborative playlists (Feb 2026).
+    pub items_available: bool,
+    /// Total length of the stored items, once loaded.
+    pub duration_ms: Option<f64>,
+}
+
 /// Count and total duration for a list header.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

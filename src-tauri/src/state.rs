@@ -18,6 +18,8 @@ pub struct AppState {
     /// Shared so the token cache and the 4-request limit apply app-wide.
     pub spotify: Arc<SpotifyClient>,
     pub sync: SyncManager,
+    /// One playlist-items fetch at a time.
+    pub playlist_lock: tokio::sync::Mutex<()>,
     /// Cancels the login currently waiting for the browser, if any.
     pending_auth: Mutex<Option<oneshot::Sender<()>>>,
 }
@@ -25,7 +27,19 @@ pub struct AppState {
 impl AppState {
     pub fn new(db: SqlitePool, http: reqwest::Client, secrets: Arc<dyn SecretStore>) -> Self {
         let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
-        Self { db, http, secrets, spotify, sync: SyncManager::default(), pending_auth: Mutex::new(None) }
+        Self {
+            db,
+            http,
+            secrets,
+            spotify,
+            sync: SyncManager::default(),
+            playlist_lock: tokio::sync::Mutex::new(()),
+            pending_auth: Mutex::new(None),
+        }
+    }
+
+    pub fn playlist_loader(&self) -> crate::core::playlists::PlaylistLoader<'_> {
+        crate::core::playlists::PlaylistLoader { db: &self.db, spotify: &self.spotify, lock: &self.playlist_lock }
     }
 
     /// Registers a new login; any older one waiting for the browser is cancelled.

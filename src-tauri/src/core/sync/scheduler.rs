@@ -31,6 +31,10 @@ pub fn spawn_sync<R: Runtime>(app: &AppHandle<R>, provider: ProviderId) -> bool 
             // YouTube sync arrives with T-22.
             ProviderId::Youtube => Ok(SyncSummary::default()),
         };
+        // Owned playlists load their items in the background after a successful sync (§8.5).
+        if result.is_ok() && provider == ProviderId::Spotify {
+            state.playlist_loader().prefetch_owned().await;
+        }
         state.sync.end(provider);
         let event = match result {
             Ok(s) => SyncFinished { provider, added: s.added, removed: s.removed, error: None },

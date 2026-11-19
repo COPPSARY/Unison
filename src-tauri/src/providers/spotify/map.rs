@@ -30,6 +30,10 @@ pub fn track_url(id: &str) -> String {
 
 /// Maps a track; `None` when it has neither an id nor a uri (nothing to key it by).
 pub fn track(t: &TrackObj) -> Option<TrackInput> {
+    // Podcast episodes are not music; Unison skips them.
+    if t.kind.as_deref() == Some("episode") {
+        return None;
+    }
     // Local files have no id; key them by uri and mark them unavailable (spec §6).
     let item_id = t.id.clone().or_else(|| t.uri.clone())?;
     let url = match (&t.external_urls.spotify, &t.id) {
@@ -117,6 +121,12 @@ mod tests {
         let m = track(&t).unwrap();
         assert_eq!(m.item_id, "spotify:local:a:b:c:1");
         assert!(!m.available);
+    }
+
+    #[test]
+    fn skips_episodes() {
+        let t: TrackObj = serde_json::from_str(r#"{"id":"e1","name":"Ep","type":"episode"}"#).unwrap();
+        assert!(track(&t).is_none());
     }
 
     #[test]

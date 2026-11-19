@@ -3,6 +3,7 @@
 
 pub mod accounts;
 pub mod library;
+pub mod playlists;
 pub mod settings;
 pub mod views;
 

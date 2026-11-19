@@ -375,6 +375,41 @@ pub async fn replace_signals(
     Ok(())
 }
 
+/// Replaces a playlist's items with `items` (unified track id, added_at) in order and marks
+/// them synced. `track_count` becomes the stored count so the header matches the table.
+pub async fn replace_playlist_items(
+    conn: &mut SqliteConnection,
+    playlist_id: &str,
+    provider: ProviderId,
+    items: &[(String, Option<i64>)],
+    now: i64,
+) -> AppResult<()> {
+    sqlx::query("DELETE FROM playlist_items WHERE playlist_id = ?1")
+        .bind(playlist_id)
+        .execute(&mut *conn)
+        .await?;
+    for (position, (track_id, added_at)) in items.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO playlist_items (playlist_id, position, track_id, source_provider, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(playlist_id)
+        .bind(i64::try_from(position).unwrap_or(i64::MAX))
+        .bind(track_id)
+        .bind(provider.as_str())
+        .bind(added_at)
+        .execute(&mut *conn)
+        .await?;
+    }
+    sqlx::query("UPDATE playlists SET items_synced = 1, synced_at = ?2, track_count = ?3 WHERE id = ?1")
+        .bind(playlist_id)
+        .bind(now)
+        .bind(i64::try_from(items.len()).unwrap_or(i64::MAX))
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 pub async fn set_sync_state(conn: &mut SqliteConnection, provider: ProviderId, resource: &str, now: i64) -> AppResult<()> {
     sqlx::query(
         "INSERT INTO sync_state (provider, resource, last_synced_at) VALUES (?1, ?2, ?3)

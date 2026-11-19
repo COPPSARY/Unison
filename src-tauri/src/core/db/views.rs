@@ -26,7 +26,7 @@ pub fn like_pattern(filter: Option<&str>) -> Option<String> {
 }
 
 #[derive(sqlx::FromRow)]
-struct TrackRow {
+pub(crate) struct TrackRow {
     id: String,
     title: String,
     artists_json: String,
@@ -46,7 +46,7 @@ struct SourceJson {
     available: i64,
 }
 
-fn to_track(row: TrackRow) -> Track {
+pub(crate) fn to_track(row: TrackRow) -> Track {
     let sources: Vec<SourceJson> = serde_json::from_str(&row.sources_json).unwrap_or_default();
     let available = sources.iter().any(|s| s.available != 0);
     Track {

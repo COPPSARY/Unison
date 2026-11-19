@@ -34,6 +34,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::library_albums,
             commands::library::library_artists,
             commands::library::playlists_list,
+            commands::playlists::playlist_get,
+            commands::playlists::playlist_tracks,
+            commands::playlists::playlist_open_external,
         ])
         .events(collect_events![SyncProgress, SyncFinished])
         .typ::<AppError>()
