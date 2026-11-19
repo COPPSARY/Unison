@@ -100,7 +100,9 @@ Acceptance criteria:
   store that URL, merged tracks keep their Spotify art (gap-filled otherwise).
 - Track lists carry every source kind (`TrackSource.provider: SourceKind`), so local / Audius
   marks show next to Spotify / YouTube.
-- Status (2026-11-20): built; clippy -D warnings, 182 Rust + 108 Vitest tests green (Linux).
+- Owner's request (2026-11-20): a single click anywhere on a track row plays it (spec §3 said
+  double-click); the hover play button still works and a click never starts the song twice.
+- Status (2026-11-20): built; clippy -D warnings, 182 Rust + 109 Vitest tests green (Linux).
   Waiting for the owner's live check: drop a few MP3s / a folder (plus a .m4p or .txt) on the
   window, try Add files / Add folder, and turn on Copy dropped files once.
 

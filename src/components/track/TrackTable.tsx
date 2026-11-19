@@ -60,7 +60,11 @@ function Row({
             type="button"
             tabIndex={-1}
             aria-label={format(strings.library.playTrack, { title: track.title })}
-            onClick={() => onPlay(index)}
+            onClick={(e) => {
+              // The row's own click plays too; don't start the same song twice.
+              e.stopPropagation();
+              onPlay(index);
+            }}
             className="u-tone invisible absolute right-0 flex size-7 items-center justify-center rounded-full text-text group-hover:visible group-focus-visible:visible hover:bg-fill-tertiary"
           >
             <Icon as={Play} size={12} fill="currentColor" />
@@ -186,11 +190,13 @@ export function TrackTable({ rows, onVisibleEnd, onPlay, label }: TrackTableProp
               data-row={item.index}
               tabIndex={track ? 0 : -1}
               onKeyDown={(e) => onKeyDown(e, item.index)}
-              onDoubleClick={() => track?.available && onPlay(item.index)}
+              // A single click anywhere on the row plays it (owner's choice over §3's double-click).
+              onClick={() => track?.available && onPlay(item.index)}
               className={cn(
                 GRID,
                 "group u-tone absolute inset-x-0 top-0 rounded-[8px] outline-none",
                 track && "hover:bg-fill-quaternary focus-visible:bg-fill-tertiary",
+                track?.available && "cursor-pointer",
               )}
               style={{ height: ROW_PX, transform: `translateY(${item.start - margin}px)` }}
             >

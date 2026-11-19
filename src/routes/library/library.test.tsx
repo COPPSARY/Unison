@@ -113,6 +113,19 @@ describe("Liked songs", () => {
     expect(screen.getByRole("button", { name: "Play Song 1" })).toBeInTheDocument();
   });
 
+  it("plays a song with a single click anywhere on its row, once", async () => {
+    cmd.playerPlay.mockResolvedValue(null);
+    renderRoute("/library/liked");
+    await userEvent.click(await screen.findByText("Album 2"));
+    await waitFor(() => expect(cmd.playerPlay).toHaveBeenCalledWith(["id1", "id2", "id3"], 1, null));
+    await userEvent.click(screen.getByRole("button", { name: "Play Song 1" }));
+    await waitFor(() => expect(cmd.playerPlay).toHaveBeenCalledTimes(2));
+    expect(cmd.playerPlay).toHaveBeenLastCalledWith(["id1", "id2", "id3"], 0, null);
+    // Unavailable songs don't play.
+    await userEvent.click(screen.getByText("Song 3"));
+    expect(cmd.playerPlay).toHaveBeenCalledTimes(2);
+  });
+
   it("moves focus between rows with the arrow keys and plays on Enter", async () => {
     renderRoute("/library/liked");
     await screen.findByText("Song 1");
