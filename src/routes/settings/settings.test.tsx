@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { renderRoute } from "@/test/render";
@@ -18,6 +18,7 @@ const cmd = {
   youtubeTestPlayback: vi.fn(),
   youtubeTestReport: vi.fn(),
   playlistsList: vi.fn(),
+  spotifyCapabilities: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
@@ -67,6 +68,7 @@ beforeEach(() => {
   cmd.accountCancelConnect.mockResolvedValue(null);
   cmd.syncNow.mockResolvedValue(null);
   cmd.playlistsList.mockResolvedValue([]);
+  cmd.spotifyCapabilities.mockResolvedValue({ premium: true, devices: [] });
 });
 
 async function openDrawer() {
@@ -211,7 +213,9 @@ describe("Settings → YouTube player test", () => {
 
     // Rust asks the UI to play the test video.
     await waitFor(() => expect(youtubeListeners.length).toBeGreaterThan(0));
-    youtubeListeners.forEach((cb) => cb({ payload: { type: "test", videoId: "jNQXAC9IVRw" } }));
+    act(() => {
+      youtubeListeners.forEach((cb) => cb({ payload: { type: "test", videoId: "jNQXAC9IVRw" } }));
+    });
     const frame = (await screen.findByTitle(strings.settings.youtube.title)) as HTMLIFrameElement;
     const src = new URL(frame.src);
     expect(src.origin).toBe("https://www.youtube-nocookie.com");
@@ -231,5 +235,29 @@ describe("Settings → YouTube player test", () => {
     renderRoute("/settings");
     await userEvent.click(await screen.findByRole("button", { name: strings.settings.youtube.test }));
     expect(await screen.findByText(/error 153/)).toBeInTheDocument();
+  });
+});
+
+describe("Settings → Playback → Spotify", () => {
+  it("shows Ready with the Spotify devices when Premium and a device is open", async () => {
+    cmd.accountsList.mockResolvedValue([
+      { provider: "spotify", status: "connected", displayName: "Demo", lastSyncedAt: null },
+      notConnected[1],
+    ]);
+    cmd.spotifyCapabilities.mockResolvedValue({
+      premium: true,
+      devices: [{ id: "d1", name: "ASUS laptop", kind: "computer", isActive: true, isRestricted: false, volumePercent: 60, supportsVolume: true }],
+    });
+    renderRoute("/settings");
+    expect(await screen.findByText(strings.settings.spotifyPlayback.ready)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: strings.settings.spotifyPlayback.devices })).toHaveTextContent("ASUS laptop");
+    await userEvent.click(screen.getByRole("button", { name: strings.settings.spotifyPlayback.refresh }));
+    await waitFor(() => expect(cmd.spotifyCapabilities).toHaveBeenCalledWith(true));
+  });
+
+  it("does not ask Spotify when not connected", async () => {
+    renderRoute("/settings");
+    expect(await screen.findAllByText(strings.settings.spotifyPlayback.notConnected)).not.toHaveLength(0);
+    expect(cmd.spotifyCapabilities).not.toHaveBeenCalled();
   });
 });

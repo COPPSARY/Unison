@@ -5,6 +5,7 @@ pub mod client;
 pub mod connect;
 pub mod map;
 pub mod models;
+pub mod player;
 pub mod playlists;
 pub mod sync;
 

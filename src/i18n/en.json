@@ -270,6 +270,18 @@
       "testing": "Testing…",
       "ok": "YouTube playback works on this PC.",
       "close": "Close player"
+    },
+    "spotifyPlayback": {
+      "title": "Spotify",
+      "ready": "Ready",
+      "needsPremium": "Needs Premium",
+      "noDevice": "Open Spotify on this PC or your phone",
+      "unknown": "Open Spotify to check Premium",
+      "notConnected": "Not connected",
+      "refresh": "Refresh",
+      "active": "Active",
+      "restricted": "Can't be controlled",
+      "devices": "Devices"
     }
   },
   "sync": {

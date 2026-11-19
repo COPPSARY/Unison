@@ -57,6 +57,8 @@ export const commands = {
 	youtubeTestPlayback: (options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_test_playback", undefined, options),
 	/**  The UI's answer to a test: `ok` when the player reached PLAYING, else the onError code. */
 	youtubeTestReport: (ok: boolean, code: number | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_test_report", { ok, code }, options),
+	/**  Spotify Premium (cached 1 h when known) and the current Spotify Connect devices. */
+	spotifyCapabilities: (refresh: boolean, options?: InvokeOptions) => __TAURI_INVOKE<SpotifyCapabilities_Serialize>("spotify_capabilities", { refresh }, options),
 };
 
 /** Events */
@@ -427,6 +429,51 @@ export type SourceStatus_Serialize = {
 	source: PlaySource | null,
 	canPlay: boolean,
 	reason: UnavailableReason | null,
+};
+
+export type SpotifyCapabilities = SpotifyCapabilities_Serialize | SpotifyCapabilities_Deserialize;
+
+export type SpotifyCapabilities_Deserialize = {
+	/**  `Some(true)` Premium, `Some(false)` not Premium, `None` unknown (no active device yet). */
+	premium?: boolean | null,
+	devices: SpotifyDevice_Deserialize[],
+};
+
+export type SpotifyCapabilities_Serialize = {
+	/**  `Some(true)` Premium, `Some(false)` not Premium, `None` unknown (no active device yet). */
+	premium: boolean | null,
+	devices: SpotifyDevice_Serialize[],
+};
+
+/**  A Spotify Connect device (subset of the documented DeviceObject). */
+export type SpotifyDevice = SpotifyDevice_Serialize | SpotifyDevice_Deserialize;
+
+/**  A Spotify Connect device (subset of the documented DeviceObject). */
+export type SpotifyDevice_Deserialize = {
+	/**  Nullable in the API; devices without an id can't be targeted. */
+	id?: string | null,
+	name: string,
+	/**  "computer", "smartphone", "speaker", … */
+	kind: string,
+	isActive: boolean,
+	/**  "If true then no Web API commands will be accepted by this device." */
+	isRestricted: boolean,
+	volumePercent?: number | null,
+	supportsVolume: boolean,
+};
+
+/**  A Spotify Connect device (subset of the documented DeviceObject). */
+export type SpotifyDevice_Serialize = {
+	/**  Nullable in the API; devices without an id can't be targeted. */
+	id: string | null,
+	name: string,
+	/**  "computer", "smartphone", "speaker", … */
+	kind: string,
+	isActive: boolean,
+	/**  "If true then no Web API commands will be accepted by this device." */
+	isRestricted: boolean,
+	volumePercent: number | null,
+	supportsVolume: boolean,
 };
 
 /**  How Spotify is used for playback. */

@@ -18,6 +18,8 @@ pub struct AppState {
     /// Shared so the token cache and the 4-request limit apply app-wide.
     pub spotify: Arc<SpotifyClient>,
     pub sync: SyncManager,
+    /// Spotify Premium answer, cached 1 h (UP-04).
+    pub spotify_premium: crate::providers::spotify::player::PremiumCache,
     /// Pending YouTube Test playback (UP-03).
     pub youtube_test: crate::core::playback::youtube::YoutubeTestHub,
     /// One playlist-items fetch at a time.
@@ -37,6 +39,7 @@ impl AppState {
             sync: SyncManager::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),
+            spotify_premium: crate::providers::spotify::player::PremiumCache::default(),
             pending_auth: Mutex::new(None),
         }
     }

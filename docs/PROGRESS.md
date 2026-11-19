@@ -32,6 +32,16 @@ Acceptance criteria:
 - Status (2026-11-19): built and committed; Liked/Albums/Artists/Playlists + sidebar playlists
   read the real DB. Waiting for the owner to check 60 fps scrolling on the 10k demo DB.
 
+### UP-04 — Spotify capabilities
+- `spotify_capabilities(refresh)` → { premium: true | false | null, devices } (device list always
+  fresh; definite Premium answers cached 1 h). Premium probed only with an active device by
+  re-setting repeat to its current value (PUT /me/player/repeat is documented Premium-only):
+  204 → Premium, 403 mentioning Premium → not Premium, anything else → unknown. Deviation from
+  the addendum: a free account with no Spotify app open reports `null` (unknown) rather than
+  `false`, because Spotify does not document what it returns then.
+- Settings → Playback → Spotify row: Ready / Needs Premium / Open Spotify… / unknown + devices.
+- Status: built and tested with fixtures; waiting for the owner's live check.
+
 ## Done
 
 - **UP-03 — YouTube embed fix** (2026-11-19): https app scheme (https://tauri.localhost), nocookie

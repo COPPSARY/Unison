@@ -173,3 +173,14 @@ export function usePlaylistTracks(id: string, itemsAvailable: boolean) {
     enabled: enabled() && itemsAvailable,
   });
 }
+
+// ---------------------------------------------------------------- Player
+
+export function useSpotifyCapabilities(connected: boolean) {
+  return useQuery({
+    queryKey: ["spotifyCapabilities"],
+    queryFn: () => commands.spotifyCapabilities(false),
+    enabled: enabled() && connected,
+    staleTime: 30_000,
+  });
+}

@@ -5,6 +5,7 @@ import { strings } from "@/i18n";
 import { errorMessage } from "@/lib/errors";
 import { useAppInfo } from "@/lib/queries";
 import { AccountsSection } from "./AccountsSection";
+import { SpotifyPlaybackRow } from "./SpotifyPlaybackRow";
 import { YoutubeTestCard } from "./YoutubeTestCard";
 import { useUiStore } from "@/stores/ui";
 
@@ -25,7 +26,8 @@ function PlaybackSection() {
   return (
     <div className="flex flex-col gap-2">
       <h2 className="px-4 text-footnote font-bold text-text-tertiary">{s.playback}</h2>
-      <section className="rounded-card bg-surface">
+      <section className="rounded-card bg-surface [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-border">
+        <SpotifyPlaybackRow />
         <YoutubeTestCard relay={relay} />
       </section>
     </div>

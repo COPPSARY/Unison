@@ -164,6 +164,18 @@ impl SpotifyClient {
         path_or_url: &str,
         body: Option<&serde_json::Value>,
     ) -> AppResult<reqwest::Response> {
+        self.send_allowing(method, path_or_url, body, &[]).await
+    }
+
+    /// Like [`Self::send`], but statuses in `pass` (e.g. 403/404 from player commands) are
+    /// returned as responses so the caller can read Spotify's error body.
+    pub async fn send_allowing(
+        &self,
+        method: Method,
+        path_or_url: &str,
+        body: Option<&serde_json::Value>,
+        pass: &[StatusCode],
+    ) -> AppResult<reqwest::Response> {
         let url = self.url(path_or_url);
         // Endpoint path for error messages (no host, no query).
         let endpoint = url::Url::parse(&url).map(|u| u.path().to_owned()).unwrap_or_default();
@@ -185,7 +197,7 @@ impl SpotifyClient {
             let response = request.send().await.map_err(network_error)?;
             let status = response.status();
 
-            if status.is_success() {
+            if status.is_success() || pass.contains(&status) {
                 return Ok(response);
             }
             match status {
