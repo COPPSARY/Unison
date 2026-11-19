@@ -10,7 +10,7 @@ import { Button, Icon, Skeleton } from "@/components/ui";
 import { format, strings } from "@/i18n";
 import type { Track_Serialize as Track } from "@/lib/bindings";
 import { formatCount, formatTotalDuration } from "@/lib/format";
-import { addFiles, addFolder } from "@/lib/local";
+import { addFiles, addFolder, locateFile } from "@/lib/local";
 import { playTracks } from "@/lib/playback";
 import { LIKED_PAGE, useLocalStats, useLocalTracks } from "@/lib/queries";
 import { useLocalImportStore, type ImportJob } from "@/stores/localImport";
@@ -77,7 +77,7 @@ function Header({
   );
 }
 
-/** Library → Local files (UP-11): imported files, Add files / Add folder, drop anywhere. */
+/** Library → Local files (UP-11/12): imported files, Add files / Add folder, drop anywhere, Locate file…. */
 export function Local() {
   const controls = useLibraryControls();
   const list = useLocalTracks({ sort: controls.sort, query: controls.query });
@@ -126,7 +126,18 @@ export function Local() {
   } else if (total === 0 && controls.query !== "") {
     body = <NoResults query={controls.query} onClear={() => controls.setFilter("")} />;
   } else {
-    body = <TrackTable rows={rows} onVisibleEnd={onVisibleEnd} onPlay={(i) => void playTracks(loaded, i)} label={t.title} />;
+    body = (
+      <TrackTable
+        rows={rows}
+        onVisibleEnd={onVisibleEnd}
+        onPlay={(i) => void playTracks(loaded, i)}
+        onLocate={(i) => {
+          const track = loaded[i];
+          if (track) void locateFile(track);
+        }}
+        label={t.title}
+      />
+    );
   }
 
   return (

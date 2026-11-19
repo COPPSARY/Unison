@@ -126,6 +126,7 @@ pub fn run() {
             create_main_window(app, material)?;
             core::sync::scheduler::start(app.handle());
             core::playback::service::start(app.handle());
+            core::local::jobs::init(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!());

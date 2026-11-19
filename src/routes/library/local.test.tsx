@@ -11,6 +11,8 @@ const cmd = {
   libraryLocalStats: vi.fn(),
   localAddFiles: vi.fn(),
   localAddFolder: vi.fn(),
+  localPickFile: vi.fn(),
+  localLocate: vi.fn(),
   accountsList: vi.fn(),
   playlistsList: vi.fn(),
   playerPlay: vi.fn(),
@@ -68,7 +70,7 @@ function track(i: number) {
     durationMs: 180_000,
     artwork: null,
     isrc: null,
-    sources: [{ provider: "local", itemId: `fp${i}`, url: `/music/${i}.mp3` }],
+    sources: [{ provider: "local", itemId: `fp${i}`, url: `/music/${i}.mp3`, available: true }],
     available: true,
     addedAt: 1_700_000_000,
   };
@@ -85,6 +87,8 @@ const progress = (over: Partial<Parameters<typeof onImportProgress>[0]> = {}) =>
   errors: [],
   finished: false,
   error: null,
+  removed: 0,
+  rescan: false,
   ...over,
 });
 
@@ -173,6 +177,52 @@ describe("Local files page", () => {
   });
 });
 
+describe("Locate file", () => {
+  const missing = {
+    ...track(3),
+    title: "Moved Song",
+    available: false,
+    sources: [{ provider: "local", itemId: "fp3", url: "/old/3.mp3", available: false }],
+  };
+
+  it("clicking a missing file's row picks the new file and relinks it", async () => {
+    cmd.libraryLocal.mockResolvedValue(page([track(1), missing]));
+    cmd.localPickFile.mockResolvedValue("/new/3.mp3");
+    cmd.localLocate.mockResolvedValue(null);
+    renderRoute("/library/local");
+    const row = (await screen.findByText("Moved Song")).closest('[role="row"]') as HTMLElement;
+    await userEvent.click(row);
+    expect(cmd.playerPlay).not.toHaveBeenCalled();
+    expect(cmd.localPickFile).toHaveBeenCalledWith(format(t.locateTitle, { title: "Moved Song" }), t.audioFilter);
+    await waitFor(() => expect(cmd.localLocate).toHaveBeenCalledWith("id3", "/new/3.mp3"));
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)?.title).toBe(format(t.located, { title: "Moved Song" })),
+    );
+  });
+
+  it("the hover button locates too; cancelling does nothing; errors show", async () => {
+    cmd.libraryLocal.mockResolvedValue(page([missing]));
+    cmd.localPickFile.mockResolvedValue(null);
+    renderRoute("/library/local");
+    const button = await screen.findByRole("button", {
+      name: format(strings.library.locate, { title: "Moved Song" }),
+    });
+    await userEvent.click(button);
+    expect(cmd.localPickFile).toHaveBeenCalledOnce();
+    expect(cmd.localLocate).not.toHaveBeenCalled();
+
+    cmd.localPickFile.mockResolvedValue("/x.m4p");
+    cmd.localLocate.mockRejectedValue({ code: { type: "drmProtected" }, message: "drm", retryable: false });
+    await userEvent.click(button);
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+        title: strings.errors.drmProtected,
+        tone: "danger",
+      }),
+    );
+  });
+});
+
 describe("Drop overlay", () => {
   it("appears while files are dragged over the window", async () => {
     renderRoute("/library/local");
@@ -228,6 +278,15 @@ describe("Import summary", () => {
     );
     expect(toasts().at(-1)).toMatchObject({ title: r.failed, tone: "danger" });
     expect(useLocalImportStore.getState().job).toBeNull();
+  });
+
+  it("words rescans: removed songs and an up-to-date library", () => {
+    onImportProgress(progress({ finished: true, rescan: true, removed: 2 }));
+    expect(toasts().at(-1)).toMatchObject({ title: format(r.removed, { count: "2" }), description: r.removedBody });
+    onImportProgress(progress({ finished: true, rescan: true, imported: 3, removed: 1 }));
+    expect(toasts().at(-1)).toMatchObject({ title: format(r.added, { count: "3" }), description: r.removedOne });
+    onImportProgress(progress({ finished: true, rescan: true, skipped: 40 }));
+    expect(toasts().at(-1)).toMatchObject({ title: r.upToDate });
   });
 
   it("uses the singular for one song", () => {

@@ -182,6 +182,20 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
         }
     };
 
+    insert_file(conn, &track_id, confidence, f, now, now).await?;
+    Ok(if replaced { Stored::Updated } else { Stored::Imported })
+}
+
+/// Writes the `local_files`, `track_sources` and `library` rows of one file for `track_id`.
+async fn insert_file(
+    conn: &mut SqliteConnection,
+    track_id: &str,
+    confidence: f64,
+    f: &LocalFileInput,
+    now: i64,
+    added_at: i64,
+) -> AppResult<()> {
+    let m = &f.meta;
     sqlx::query(
         "INSERT INTO local_files (fingerprint, path, size, mtime, codec, sample_rate, bitrate,
            artwork_path, imported_at)
@@ -209,7 +223,7 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
            quality = excluded.quality, replaygain_track = excluded.replaygain_track,
            replaygain_album = excluded.replaygain_album",
     )
-    .bind(&track_id)
+    .bind(track_id)
     .bind(PROVIDER)
     .bind(&f.fingerprint)
     .bind(&f.path)
@@ -226,13 +240,157 @@ pub async fn store(conn: &mut SqliteConnection, index: &mut MatchIndex, f: &Loca
          VALUES (?1, NULL, ?2, ?3, ?4, ?5)
          ON CONFLICT(provider, kind, ref_id) DO UPDATE SET track_id = excluded.track_id",
     )
-    .bind(&track_id)
+    .bind(track_id)
     .bind(PROVIDER)
     .bind(KIND)
     .bind(&f.fingerprint)
+    .bind(added_at)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// One imported file as the missing-file check sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnownFile {
+    pub fingerprint: String,
+    pub path: String,
+    /// The local source is currently playable.
+    pub available: bool,
+}
+
+pub async fn all_files(conn: &mut SqliteConnection) -> AppResult<Vec<KnownFile>> {
+    let rows: Vec<(String, String, Option<i64>)> = sqlx::query_as(
+        "SELECT f.fingerprint, f.path, s.available FROM local_files f
+         LEFT JOIN track_sources s ON s.provider = ?1 AND s.item_id = f.fingerprint",
+    )
+    .bind(PROVIDER)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(fingerprint, path, available)| KnownFile { fingerprint, path, available: available.unwrap_or(1) != 0 })
+        .collect())
+}
+
+/// Marks a file's source missing (moved or deleted, can be located) or found again.
+pub async fn set_missing(conn: &mut SqliteConnection, fingerprint: &str, missing: bool, now: i64) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE track_sources SET available = ?3,
+           unavailable_reason = CASE WHEN ?3 = 0 THEN 'file_missing' ELSE NULL END, fetched_at = ?4
+         WHERE provider = ?1 AND item_id = ?2",
+    )
+    .bind(PROVIDER)
+    .bind(fingerprint)
+    .bind(i64::from(!missing))
     .bind(now)
     .execute(&mut *conn)
     .await?;
+    Ok(())
+}
 
-    Ok(if replaced { Stored::Updated } else { Stored::Imported })
+/// "Locate file…": points `track_id`'s local source at a file the user picked. The same file
+/// (same fingerprint) just gets its new path; a different file replaces the old one and is tied
+/// to this song without the matcher. The song keeps its date added. Errors with `NotFound` when
+/// the song has no local file.
+pub async fn relink(conn: &mut SqliteConnection, track_id: &str, f: &LocalFileInput, now: i64) -> AppResult<()> {
+    let old: Vec<(String, Option<i64>)> = sqlx::query_as(
+        "SELECT s.item_id, l.added_at FROM track_sources s
+         LEFT JOIN library l ON l.provider = s.provider AND l.kind = ?2 AND l.ref_id = s.item_id
+         WHERE s.track_id = ?1 AND s.provider = ?3",
+    )
+    .bind(track_id)
+    .bind(KIND)
+    .bind(PROVIDER)
+    .fetch_all(&mut *conn)
+    .await?;
+    if old.is_empty() {
+        return Err(crate::error::AppError::not_found("this song has no local file"));
+    }
+
+    if old.iter().any(|(fp, _)| *fp == f.fingerprint) {
+        // Another entry may already claim the new path (e.g. imported again after the move).
+        let at_path: Option<String> = sqlx::query_scalar("SELECT fingerprint FROM local_files WHERE path = ?1")
+            .bind(&f.path)
+            .fetch_optional(&mut *conn)
+            .await?;
+        if let Some(other) = at_path.filter(|other| *other != f.fingerprint) {
+            remove(conn, &other).await?;
+        }
+        sqlx::query("UPDATE local_files SET path = ?2, size = ?3, mtime = ?4 WHERE fingerprint = ?1")
+            .bind(&f.fingerprint)
+            .bind(&f.path)
+            .bind(i64::try_from(f.size).unwrap_or(i64::MAX))
+            .bind(f.mtime)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query(
+            "UPDATE track_sources SET url = ?3, available = 1, unavailable_reason = NULL, fetched_at = ?4
+             WHERE provider = ?1 AND item_id = ?2",
+        )
+        .bind(PROVIDER)
+        .bind(&f.fingerprint)
+        .bind(&f.path)
+        .bind(now)
+        .execute(&mut *conn)
+        .await?;
+        return Ok(());
+    }
+
+    // A different file: whatever else holds that file or path gives it up first.
+    let taken: Vec<String> = sqlx::query_scalar("SELECT fingerprint FROM local_files WHERE fingerprint = ?1 OR path = ?2")
+        .bind(&f.fingerprint)
+        .bind(&f.path)
+        .fetch_all(&mut *conn)
+        .await?;
+    for fp in taken {
+        remove(conn, &fp).await?;
+    }
+    let added_at = old.iter().filter_map(|(_, at)| *at).min().unwrap_or(now);
+    for (fp, _) in &old {
+        sqlx::query("DELETE FROM local_files WHERE fingerprint = ?1").bind(fp).execute(&mut *conn).await?;
+        sqlx::query("DELETE FROM track_sources WHERE provider = ?1 AND item_id = ?2")
+            .bind(PROVIDER)
+            .bind(fp)
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query("DELETE FROM library WHERE provider = ?1 AND kind = ?2 AND ref_id = ?3")
+            .bind(PROVIDER)
+            .bind(KIND)
+            .bind(fp)
+            .execute(&mut *conn)
+            .await?;
+    }
+    insert_file(conn, track_id, 1.0, f, now, added_at).await
+}
+
+/// Watched folders, oldest first.
+pub async fn folders(conn: &mut SqliteConnection) -> AppResult<Vec<(String, Option<i64>)>> {
+    Ok(sqlx::query_as("SELECT path, last_scan_at FROM watched_folders ORDER BY rowid")
+        .fetch_all(&mut *conn)
+        .await?)
+}
+
+pub async fn add_folder(conn: &mut SqliteConnection, path: &str) -> AppResult<()> {
+    sqlx::query("INSERT INTO watched_folders (path, last_scan_at) VALUES (?1, NULL) ON CONFLICT(path) DO NOTHING")
+        .bind(path)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+pub async fn remove_folder(conn: &mut SqliteConnection, path: &str) -> AppResult<()> {
+    sqlx::query("DELETE FROM watched_folders WHERE path = ?1").bind(path).execute(&mut *conn).await?;
+    Ok(())
+}
+
+pub async fn mark_scanned(conn: &mut SqliteConnection, paths: &[String], now: i64) -> AppResult<()> {
+    for path in paths {
+        sqlx::query("UPDATE watched_folders SET last_scan_at = ?2 WHERE path = ?1")
+            .bind(path)
+            .bind(now)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
 }

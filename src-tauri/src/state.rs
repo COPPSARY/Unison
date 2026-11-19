@@ -26,6 +26,8 @@ pub struct AppState {
     pub sync: SyncManager,
     /// Local file imports, one at a time (UP-10).
     pub local: crate::core::local::LocalImports,
+    /// Watched folders (UP-12).
+    pub watch: crate::core::local::watch::FolderWatch,
     /// Spotify Premium answer, cached 1 h (UP-04).
     pub spotify_premium: Arc<crate::providers::spotify::player::PremiumCache>,
     /// Spotify Connect remote control (UP-08).
@@ -66,6 +68,7 @@ impl AppState {
             youtube,
             sync: SyncManager::default(),
             local: crate::core::local::LocalImports::default(),
+            watch: crate::core::local::watch::FolderWatch::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),
             spotify_premium,

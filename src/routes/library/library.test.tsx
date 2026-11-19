@@ -69,7 +69,7 @@ function track(i: number, available = true) {
     durationMs: 200_000 + i * 1000,
     artwork: null,
     isrc: null,
-    sources: [{ provider: i % 2 ? "youtube" : "spotify", itemId: `s${i}`, url: "https://x" }],
+    sources: [{ provider: i % 2 ? "youtube" : "spotify", itemId: `s${i}`, url: "https://x", available: true }],
     available,
     addedAt: 1_700_000_000 - i * 86_400,
   };

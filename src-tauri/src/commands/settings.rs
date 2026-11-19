@@ -15,6 +15,8 @@ pub async fn settings_get(state: State<'_, AppState>) -> AppResult<Settings> {
 /// Saves settings and returns the stored (sanitised) value.
 #[tauri::command]
 #[specta::specta]
-pub async fn settings_set(state: State<'_, AppState>, settings: Settings) -> AppResult<Settings> {
+pub async fn settings_set(state: State<'_, AppState>, mut settings: Settings) -> AppResult<Settings> {
+    // Watched folders change only through local_folder_add / local_folder_remove.
+    settings.local.watched_folders = db::settings::load(&state.db).await?.local.watched_folders;
     db::settings::save(&state.db, settings).await
 }

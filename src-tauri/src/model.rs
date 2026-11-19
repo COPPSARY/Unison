@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 pub use crate::model_player::{
-    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, SpotifyMode,
+    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, SpotifyMode, WatchedFolder,
 };
 
 /// Build and schema information shown in Settings → About.
@@ -61,6 +61,8 @@ pub struct TrackSource {
     pub item_id: String,
     /// Web URL, or the absolute file path for local files.
     pub url: String,
+    /// False when this source can't play (e.g. a local file that was moved or deleted).
+    pub available: bool,
 }
 
 /// One song, possibly available on several platforms.

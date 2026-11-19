@@ -74,7 +74,8 @@ export function useLocalEvents() {
       events.localImportProgress.listen(({ payload }) => {
         onImportProgress(payload);
         // New rows land batch by batch: refresh the local list as they arrive.
-        if (payload.imported > 0) void qc.invalidateQueries({ queryKey: ["local"] });
+        // The last event also updates watched folders' scan times.
+        if (payload.imported > 0 || payload.finished) void qc.invalidateQueries({ queryKey: ["local"] });
       }),
     );
     keep(events.localChanged.listen(() => void qc.invalidateQueries()));

@@ -106,6 +106,38 @@ Acceptance criteria:
   Waiting for the owner's live check: drop a few MP3s / a folder (plus a .m4p or .txt) on the
   window, try Add files / Add folder, and turn on Copy dropped files once.
 
+### UP-12 — Watched folders, rescan, missing files, Locate file…
+Acceptance criteria:
+- `watched_folders` table is the list (Settings `local.watchedFolders` mirrors it; settings_set
+  can't change it). Commands: `local_folders_list`, `local_folder_add(path)` (imports the folder
+  in the background), `local_folder_remove(path)` (songs already added stay),
+  `local_rescan` → job id, `local_locate(track_id, new_path)`, plus native pickers
+  `local_pick_folder` / `local_pick_file` (dialogs opened from Rust).
+- A notify watcher (debounced 1.5 s) on every watched folder: a file added, changed, moved or
+  deleted there updates the library within 5 s, quietly (no toast; lists refresh through
+  `local://changed`). Restarted when folders change; started at launch with a quiet scan.
+- Missing files: a file deleted from a watched folder leaves the library; any other missing
+  file (or a whole watched folder that's gone, e.g. an unplugged drive) is kept greyed out with
+  reason `file_missing` and a "Locate file…" action; a file that comes back plays again.
+- Locate: same file → path updated; a different file → replaces the old one on the same song
+  (keeps date added). DRM / unsupported / missing picks give a clear error.
+- Rescan library: imports new files from every watched folder, runs the missing-file check,
+  updates last-scan time, and reports the result (added / removed / up to date).
+- UI: Settings → Local files lists watched folders (path, last scanned or "Folder not found",
+  Remove), Add folder…, Rescan library with last-scan time. Track lists carry per-source
+  `available`; on Local files a missing file's row says "File not found" and clicking it opens
+  Locate.
+- Tests: plan rules (remove / missing / restored / unplugged), relink, rescan job, a real
+  watcher picking up an added and a deleted file within 5 s; Vitest for the settings list and
+  Locate flow. All checks green.
+- Notes: a missing file that isn't in a watched folder stays greyed out until it's located or
+  comes back (there is no "Remove from library" yet; ideas list). The settings page gets file-type
+  checkboxes in UP-14.
+- Status (2026-11-20): built; clippy -D warnings, 187 Rust + 115 Vitest tests green (Linux).
+  Waiting for the owner's live check: Settings → Local files → Add folder…, copy an MP3 into
+  that folder (appears within ~5 s), delete it (disappears), move a dropped file and use
+  Locate file… on its greyed row, then Rescan library.
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

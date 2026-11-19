@@ -66,6 +66,13 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::local::local_add_files,
             commands::local::local_add_folder,
             commands::local::local_copy_target,
+            commands::local::local_pick_folder,
+            commands::local::local_pick_file,
+            commands::local::local_folders_list,
+            commands::local::local_folder_add,
+            commands::local::local_folder_remove,
+            commands::local::local_rescan,
+            commands::local::local_locate,
         ])
         .events(collect_events![
             SyncProgress,

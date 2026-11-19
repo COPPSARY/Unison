@@ -141,6 +141,15 @@ export function useLocalStats(query: string) {
   });
 }
 
+/** Settings → Local files: watched folders (refreshed with the rest of `["local"]`). */
+export function useWatchedFolders() {
+  return useQuery({
+    queryKey: ["local", "folders"],
+    queryFn: () => commands.localFoldersList(),
+    enabled: enabled(),
+  });
+}
+
 export function useAlbums({ provider, sort, query }: LibraryArgs) {
   return useQuery({
     queryKey: ["albums", provider, sort, query],

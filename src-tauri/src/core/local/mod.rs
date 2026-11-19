@@ -6,8 +6,10 @@ pub mod copy;
 pub mod fingerprint;
 pub mod import;
 pub mod jobs;
+pub mod missing;
 pub mod scan;
 pub mod tags;
+pub mod watch;
 #[cfg(test)]
 pub mod testing;
 
@@ -73,6 +75,10 @@ pub struct LocalImportProgress {
     pub finished: bool,
     /// Set when the job stopped early.
     pub error: Option<AppError>,
+    /// Rescan: songs removed because their files were deleted from a watched folder.
+    pub removed: u32,
+    /// This job is a library rescan (the UI words its summary differently).
+    pub rescan: bool,
 }
 
 /// `local://changed`: the local library changed (sent at the end of a job that changed it).

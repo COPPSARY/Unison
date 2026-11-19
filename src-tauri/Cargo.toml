@@ -47,6 +47,7 @@ strsim = "0.11.1"
 unicode-normalization = "0.1.26"
 image = { version = "0.25.9", default-features = false, features = ["jpeg", "png"] }
 tauri-plugin-dialog = "2"
+notify-debouncer-full = "0.5"
 
 [lints]
 workspace = true

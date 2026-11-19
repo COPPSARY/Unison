@@ -101,6 +101,23 @@ export const commands = {
 	localAddFolder: (title: string, options?: InvokeOptions) => __TAURI_INVOKE<number | null>("local_add_folder", { title }, options),
 	/**  Where copy-on-drop puts files (the setting, else `<Music>/Unison`), for Settings. */
 	localCopyTarget: (options?: InvokeOptions) => __TAURI_INVOKE<string>("local_copy_target", undefined, options),
+	/**  Native folder picker; `null` when cancelled. Used by Settings → Add folder…. */
+	localPickFolder: (title: string, options?: InvokeOptions) => __TAURI_INVOKE<string | null>("local_pick_folder", { title }, options),
+	/**  Native single-file picker for audio files; `null` when cancelled. Used by Locate file…. */
+	localPickFile: (title: string, filterLabel: string, options?: InvokeOptions) => __TAURI_INVOKE<string | null>("local_pick_file", { title, filterLabel }, options),
+	/**  Watched folders with their last scan time. */
+	localFoldersList: (options?: InvokeOptions) => __TAURI_INVOKE<WatchedFolder_Serialize[]>("local_folders_list", undefined, options),
+	/**  Watches a folder and imports what's in it (in the background). Returns the new list. */
+	localFolderAdd: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<WatchedFolder_Serialize[]>("local_folder_add", { path }, options),
+	/**  Stops watching a folder; its songs stay in the library. Returns the new list. */
+	localFolderRemove: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<WatchedFolder_Serialize[]>("local_folder_remove", { path }, options),
+	/**
+	 *  Rescan library: watched folders + missing-file check. Returns the job id; progress arrives as
+	 *  `local://import-progress` with `rescan: true`.
+	 */
+	localRescan: (options?: InvokeOptions) => __TAURI_INVOKE<number>("local_rescan", undefined, options),
+	/**  Locate file…: points a song whose local file moved at `new_path`. */
+	localLocate: (trackId: string, newPath: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("local_locate", { trackId, newPath }, options),
 };
 
 /** Events */
@@ -276,6 +293,10 @@ export type LocalImportProgress_Deserialize = {
 	finished: boolean,
 	/**  Set when the job stopped early. */
 	error?: AppError | null,
+	/**  Rescan: songs removed because their files were deleted from a watched folder. */
+	removed: number,
+	/**  This job is a library rescan (the UI words its summary differently). */
+	rescan: boolean,
 };
 
 /**  `local://import-progress`: sent after every batch and once more with `finished: true`. */
@@ -294,6 +315,10 @@ export type LocalImportProgress_Serialize = {
 	finished: boolean,
 	/**  Set when the job stopped early. */
 	error: AppError | null,
+	/**  Rescan: songs removed because their files were deleted from a watched folder. */
+	removed: number,
+	/**  This job is a library rescan (the UI words its summary differently). */
+	rescan: boolean,
 };
 
 export type LocalSettings = LocalSettings_Serialize | LocalSettings_Deserialize;
@@ -725,6 +750,8 @@ export type TrackSource = {
 	itemId: string,
 	/**  Web URL, or the absolute file path for local files. */
 	url: string,
+	/**  False when this source can't play (e.g. a local file that was moved or deleted). */
+	available: boolean,
 };
 
 /**  One song, possibly available on several platforms. */
@@ -765,6 +792,27 @@ export type UnavailableReason = { type: "notConnected" } | { type: "premiumRequi
 { type: "disabled" } | { type: "offline" } | 
 /**  The track has no source of this kind. */
 { type: "noSource" };
+
+/**  A folder Unison watches for new, changed and deleted music (Settings → Local files). */
+export type WatchedFolder = WatchedFolder_Serialize | WatchedFolder_Deserialize;
+
+/**  A folder Unison watches for new, changed and deleted music (Settings → Local files). */
+export type WatchedFolder_Deserialize = {
+	path: string,
+	/**  Last full scan, Unix seconds. */
+	lastScanAt?: number | null,
+	/**  False while the folder can't be found (e.g. an unplugged drive). */
+	exists: boolean,
+};
+
+/**  A folder Unison watches for new, changed and deleted music (Settings → Local files). */
+export type WatchedFolder_Serialize = {
+	path: string,
+	/**  Last full scan, Unix seconds. */
+	lastScanAt: number | null,
+	/**  False while the folder can't be found (e.g. an unplugged drive). */
+	exists: boolean,
+};
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
 export type WindowMaterial = "mica" | "acrylic" | "off";

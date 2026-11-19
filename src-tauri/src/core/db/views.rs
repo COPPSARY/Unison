@@ -61,7 +61,12 @@ pub(crate) fn to_track(row: TrackRow) -> Track {
         sources: sources
             .into_iter()
             .filter_map(|s| {
-                Some(TrackSource { provider: kind_of(&s.provider)?, item_id: s.item_id, url: s.url })
+                Some(TrackSource {
+                    provider: kind_of(&s.provider)?,
+                    item_id: s.item_id,
+                    url: s.url,
+                    available: s.available != 0,
+                })
             })
             .collect(),
         available,

@@ -152,6 +152,17 @@ impl LocalSettings {
     }
 }
 
+/// A folder Unison watches for new, changed and deleted music (Settings → Local files).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchedFolder {
+    pub path: String,
+    /// Last full scan, Unix seconds.
+    pub last_scan_at: Option<i64>,
+    /// False while the folder can't be found (e.g. an unplugged drive).
+    pub exists: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AudiusSettings {

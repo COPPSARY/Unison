@@ -21,6 +21,9 @@ pub struct ImportConfig {
     pub artwork_dir: PathBuf,
     /// Copy-on-drop: copy files here first and import the copies.
     pub copy_to: Option<PathBuf>,
+    /// Rescan: afterwards check every imported file against the disk; these are the watched
+    /// folders (files deleted from them leave the library).
+    pub check_missing: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -29,6 +32,8 @@ pub struct ImportSummary {
     pub updated: u32,
     pub skipped: u32,
     pub failed: u32,
+    /// Rescan only: deleted files removed, missing files marked, files found again.
+    pub checked: super::missing::Checked,
 }
 
 enum Prepared {
@@ -99,14 +104,21 @@ pub async fn run(
         errors: Vec::new(),
         finished: false,
         error: None,
+        removed: 0,
+        rescan: config.check_missing.is_some(),
     };
     let mut summary = ImportSummary::default();
     let result = run_inner(pool, paths, config, reporter, &mut progress, &mut summary).await;
     progress.finished = true;
     progress.error = result.as_ref().err().cloned();
     reporter.progress(progress);
-    if summary.imported + summary.updated > 0 {
-        reporter.changed(LocalChanged { added: summary.imported, removed: 0, updated: summary.updated });
+    let c = summary.checked;
+    if summary.imported + summary.updated > 0 || c.changed() {
+        reporter.changed(LocalChanged {
+            added: summary.imported,
+            removed: c.removed,
+            updated: summary.updated + c.missing + c.restored,
+        });
     }
     result.map(|()| summary)
 }
@@ -148,6 +160,7 @@ async fn run_inner(
         (repo::known_files(&mut conn).await?, MatchIndex::load(&mut conn).await?)
     };
     let artwork_dir = config.artwork_dir;
+    let config_check = config.check_missing;
 
     for chunk in files.chunks(BATCH_SIZE) {
         let batch: Vec<(PathBuf, Option<(i64, i64)>)> = chunk
@@ -192,6 +205,52 @@ async fn run_inner(
         tx.commit().await?;
         reporter.progress(progress.clone());
     }
+
+    if let Some(watched) = &config_check {
+        summary.checked = super::missing::check(pool, watched, None).await?;
+        progress.removed = summary.checked.removed;
+    }
+    Ok(())
+}
+
+/// "Locate file…": ties `track_id`'s local source to `path` (addendum §4 edge cases).
+pub async fn locate(
+    pool: &SqlitePool,
+    track_id: &str,
+    path: &Path,
+    extensions: &[String],
+    artwork_dir: PathBuf,
+) -> AppResult<()> {
+    use super::IssueKind;
+    use crate::error::ErrorCode;
+
+    let (files, issues) = scan::collect(&[path.to_path_buf()], extensions);
+    let file = match (files.into_iter().next(), issues.first()) {
+        (Some(file), _) if file.is_file() => file,
+        (_, Some(issue)) => {
+            let code = match issue.reason {
+                IssueKind::DrmProtected => ErrorCode::DrmProtected,
+                IssueKind::Missing => ErrorCode::FileMissing,
+                _ => ErrorCode::UnsupportedFormat,
+            };
+            return Err(AppError::new(code, "the chosen file can't be used"));
+        }
+        // A folder was chosen.
+        _ => return Err(AppError::new(ErrorCode::UnsupportedFormat, "not an audio file")),
+    };
+    let prepared = blocking(move || prepare(&file, None, &artwork_dir)).await?;
+    let input = match prepared {
+        Prepared::File(input) => input,
+        Prepared::Failed(issue) => {
+            let code =
+                if issue.reason == IssueKind::Missing { ErrorCode::FileMissing } else { ErrorCode::UnsupportedFormat };
+            return Err(AppError::new(code, "the chosen file can't be read"));
+        }
+        Prepared::Unchanged => return Err(AppError::internal("unexpected unchanged file")),
+    };
+    let mut tx = pool.begin().await?;
+    repo::relink(&mut tx, track_id, &input, now_unix()).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -240,11 +299,21 @@ mod tests {
         }
 
         async fn import(&self, paths: Vec<PathBuf>) -> (ImportSummary, Recorder) {
+            self.run(paths, None).await
+        }
+
+        /// Rescan: import the watched folders, then check every file.
+        async fn rescan(&self, watched: Vec<PathBuf>) -> (ImportSummary, Recorder) {
+            self.run(watched.clone(), Some(watched)).await
+        }
+
+        async fn run(&self, paths: Vec<PathBuf>, check_missing: Option<Vec<PathBuf>>) -> (ImportSummary, Recorder) {
             let rec = Recorder::default();
             let config = ImportConfig {
                 extensions: crate::model::LocalSettings::default().extensions,
                 artwork_dir: self.dir.path().join("artwork"),
                 copy_to: self.copy_to.clone(),
+                check_missing,
             };
             let summary = run(&self.pool, 1, paths, config, &rec).await.unwrap();
             (summary, rec)
@@ -486,5 +555,111 @@ mod tests {
             vec![IssueKind::DrmProtected, IssueKind::Missing, IssueKind::Unreadable, IssueKind::UnsupportedFormat]
         );
         assert!(last.errors.iter().any(|e| e.path.ends_with("broken.mp3") && e.reason == IssueKind::Unreadable));
+    }
+
+    async fn source_state(pool: &SqlitePool, like: &str) -> (String, i64, Option<String>) {
+        sqlx::query_as(
+            "SELECT s.track_id, s.available, s.unavailable_reason FROM track_sources s
+             JOIN local_files f ON f.fingerprint = s.item_id WHERE f.path LIKE ?1",
+        )
+        .bind(like)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn rescan_removes_deleted_marks_missing_and_restores() {
+        let env = Env::new().await;
+        let keep = env.music().join("Keep - One.wav");
+        let delete = env.music().join("Delete - Two.wav");
+        write_wav(&keep, 0.1, 40);
+        write_wav(&delete, 0.1, 41);
+        let downloads = env.dir.path().join("Downloads");
+        std::fs::create_dir(&downloads).unwrap();
+        let dropped = downloads.join("Dropped - Three.wav");
+        write_wav(&dropped, 0.1, 42);
+        env.import(vec![env.music(), dropped.clone()]).await;
+
+        std::fs::remove_file(&delete).unwrap();
+        let parked = env.dir.path().join("parked.wav");
+        std::fs::rename(&dropped, &parked).unwrap();
+        let added = env.music().join("New - Four.wav");
+        write_wav(&added, 0.1, 43);
+
+        let (summary, rec) = env.rescan(vec![env.music()]).await;
+        assert_eq!(summary.imported, 1);
+        assert_eq!(summary.checked, crate::core::local::missing::Checked { removed: 1, missing: 1, restored: 0 });
+        let last = rec.progress.lock().unwrap().last().cloned().unwrap();
+        assert!(last.rescan && last.finished);
+        assert_eq!(last.removed, 1);
+        assert_eq!(*rec.changed.lock().unwrap(), vec![LocalChanged { added: 1, removed: 1, updated: 1 }]);
+        assert_eq!(env.count("SELECT COUNT(*) FROM local_files").await, 3);
+        assert_eq!(env.count("SELECT COUNT(*) FROM tracks").await, 3);
+        let (_, available, reason) = source_state(&env.pool, "%Dropped%").await;
+        assert_eq!((available, reason.as_deref()), (0, Some("file_missing")));
+
+        // The dropped file comes back: playable again.
+        std::fs::rename(&parked, &dropped).unwrap();
+        let (summary, _) = env.rescan(vec![env.music()]).await;
+        assert_eq!(summary.checked.restored, 1);
+        assert_eq!(source_state(&env.pool, "%Dropped%").await.1, 1);
+
+        // A watched folder that's gone (unplugged drive) removes nothing.
+        let usb = env.dir.path().join("USB");
+        std::fs::create_dir(&usb).unwrap();
+        let on_usb = usb.join("Usb - Five.wav");
+        write_wav(&on_usb, 0.1, 44);
+        env.import(vec![usb.clone()]).await;
+        std::fs::remove_dir_all(&usb).unwrap();
+        let (summary, _) = env.rescan(vec![env.music(), usb]).await;
+        assert_eq!(summary.checked, crate::core::local::missing::Checked { removed: 0, missing: 1, restored: 0 });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn locate_follows_the_same_file_or_takes_a_new_one() {
+        let env = Env::new().await;
+        let downloads = env.dir.path().join("Downloads");
+        std::fs::create_dir(&downloads).unwrap();
+        let file = downloads.join("Artist - Song.wav");
+        write_wav(&file, 0.2, 50);
+        env.import(vec![file.clone()]).await;
+        let added_at: i64 = sqlx::query_scalar("UPDATE library SET added_at = 1234 RETURNING added_at")
+            .fetch_one(&env.pool)
+            .await
+            .unwrap();
+        let moved = env.music().join("Song.wav");
+        std::fs::rename(&file, &moved).unwrap();
+        env.rescan(vec![]).await;
+        let (track, available, _) = source_state(&env.pool, "%Song.wav").await;
+        assert_eq!(available, 0);
+
+        let exts = crate::model::LocalSettings::default().extensions;
+        let art = env.dir.path().join("artwork");
+        locate(&env.pool, &track, &moved, &exts, art.clone()).await.unwrap();
+        let (same_track, available, reason) = source_state(&env.pool, "%music%Song.wav").await;
+        assert_eq!((same_track.as_str(), available, reason), (track.as_str(), 1, None));
+        assert_eq!(env.count("SELECT COUNT(*) FROM local_files").await, 1);
+
+        // A different file (e.g. a re-rip) replaces it on the same song, keeping its date added.
+        let other = env.music().join("Song (flac rip).wav");
+        write_wav(&other, 0.3, 51);
+        locate(&env.pool, &track, &other, &exts, art.clone()).await.unwrap();
+        let (now_track, available, _) = source_state(&env.pool, "%flac rip%").await;
+        assert_eq!((now_track.as_str(), available), (track.as_str(), 1));
+        assert_eq!(env.count("SELECT COUNT(*) FROM local_files").await, 1);
+        assert_eq!(env.count("SELECT COUNT(*) FROM tracks").await, 1);
+        let kept: i64 = sqlx::query_scalar("SELECT added_at FROM library").fetch_one(&env.pool).await.unwrap();
+        assert_eq!(kept, added_at);
+
+        // Bad picks.
+        let drm = env.music().join("bought.m4p");
+        std::fs::write(&drm, b"drm").unwrap();
+        let err = locate(&env.pool, &track, &drm, &exts, art.clone()).await.unwrap_err();
+        assert_eq!(err.code, crate::error::ErrorCode::DrmProtected);
+        let err = locate(&env.pool, &track, &env.music().join("nope.wav"), &exts, art.clone()).await.unwrap_err();
+        assert_eq!(err.code, crate::error::ErrorCode::FileMissing);
+        let err = locate(&env.pool, "no-such-track", &other, &exts, art).await.unwrap_err();
+        assert_eq!(err.code, crate::error::ErrorCode::NotFound);
     }
 }

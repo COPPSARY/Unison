@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Clock3, Play } from "lucide-react";
+import { Clock3, FileSearch, Play } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import { useScrollContainer } from "@/components/shell/ScrollContainer";
 import { Icon, Skeleton, Tooltip } from "@/components/ui";
@@ -7,6 +7,7 @@ import { format, strings } from "@/i18n";
 import type { Track_Serialize as Track } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDuration } from "@/lib/format";
+import { missingFile } from "@/lib/local";
 import { Artwork } from "./Artwork";
 import { SourceMarks } from "./SourceMark";
 
@@ -23,18 +24,32 @@ export type TrackTableProps = {
   /** Called with the last visible index so the caller can load more. */
   onVisibleEnd?: (lastIndex: number) => void;
   onPlay: (index: number) => void;
+  /** "Locate file…" for songs whose only playable source was a local file that moved. */
+  onLocate?: (index: number) => void;
   label: string;
 };
+
+/** The row can't play, but its moved file can be located. */
+const locatable = (track: Track | undefined, onLocate: unknown): track is Track =>
+  !!track && !track.available && !!onLocate && missingFile(track);
 
 function Row({
   track,
   index,
   onPlay,
+  onLocate,
 }: {
   track: Track;
   index: number;
   onPlay: (index: number) => void;
+  onLocate: ((index: number) => void) | undefined;
 }) {
+  const canLocate = locatable(track, onLocate);
+  const reason = missingFile(track)
+    ? canLocate
+      ? strings.library.fileMissingLocate
+      : strings.library.fileMissing
+    : strings.library.unavailable;
   const title = (
     <div className="flex min-w-0 items-center gap-3">
       <Artwork src={track.artwork} className={cn("size-10", !track.available && "opacity-40")} />
@@ -69,12 +84,25 @@ function Row({
           >
             <Icon as={Play} size={12} fill="currentColor" />
           </button>
+        ) : canLocate ? (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={format(strings.library.locate, { title: track.title })}
+            onClick={(e) => {
+              e.stopPropagation();
+              onLocate?.(index);
+            }}
+            className="u-tone invisible absolute right-0 flex size-7 items-center justify-center rounded-full text-text group-hover:visible group-focus-visible:visible hover:bg-fill-tertiary"
+          >
+            <Icon as={FileSearch} size={16} />
+          </button>
         ) : null}
       </div>
       {track.available ? (
         title
       ) : (
-        <Tooltip content={strings.library.unavailable} side="top">
+        <Tooltip content={reason} side="top">
           {title}
         </Tooltip>
       )}
@@ -106,7 +134,7 @@ function SkeletonRow() {
 }
 
 /** Virtualised track list (spec §3 Library lists): handles 10,000+ rows. */
-export function TrackTable({ rows, onVisibleEnd, onPlay, label }: TrackTableProps) {
+export function TrackTable({ rows, onVisibleEnd, onPlay, onLocate, label }: TrackTableProps) {
   const scrollRef = useScrollContainer();
   const listRef = useRef<HTMLDivElement>(null);
   // Distance from the top of the scroll container to the first row (header + toolbar above).
@@ -151,6 +179,9 @@ export function TrackTable({ rows, onVisibleEnd, onPlay, label }: TrackTableProp
     } else if (e.key === "Enter" && rows[index]?.available) {
       e.preventDefault();
       onPlay(index);
+    } else if (e.key === "Enter" && locatable(rows[index], onLocate)) {
+      e.preventDefault();
+      onLocate?.(index);
     }
   };
 
@@ -191,16 +222,20 @@ export function TrackTable({ rows, onVisibleEnd, onPlay, label }: TrackTableProp
               tabIndex={track ? 0 : -1}
               onKeyDown={(e) => onKeyDown(e, item.index)}
               // A single click anywhere on the row plays it (owner's choice over §3's double-click).
-              onClick={() => track?.available && onPlay(item.index)}
+              // A missing file's row opens Locate instead.
+              onClick={() => {
+                if (track?.available) onPlay(item.index);
+                else if (locatable(track, onLocate)) onLocate?.(item.index);
+              }}
               className={cn(
                 GRID,
                 "group u-tone absolute inset-x-0 top-0 rounded-[8px] outline-none",
                 track && "hover:bg-fill-quaternary focus-visible:bg-fill-tertiary",
-                track?.available && "cursor-pointer",
+                (track?.available || locatable(track, onLocate)) && "cursor-pointer",
               )}
               style={{ height: ROW_PX, transform: `translateY(${item.start - margin}px)` }}
             >
-              {track ? <Row track={track} index={item.index} onPlay={onPlay} /> : <SkeletonRow />}
+              {track ? <Row track={track} index={item.index} onPlay={onPlay} onLocate={onLocate} /> : <SkeletonRow />}
             </div>
           );
         })}

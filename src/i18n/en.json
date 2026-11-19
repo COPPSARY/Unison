@@ -229,7 +229,9 @@
       "folderDialogTitle": "Add a music folder",
       "audioFilter": "Audio files",
       "scanning": "Looking for music…",
-      "importing": "Adding {done} of {total}…"
+      "importing": "Adding {done} of {total}…",
+      "locateTitle": "Find the file for “{title}”",
+      "located": "Found “{title}”"
     },
     "playlist": {
       "title": "Playlist",
@@ -291,7 +293,20 @@
       "title": "Local files",
       "copyOnDrop": "Copy dropped files into your music folder",
       "copyTarget": "Copies go to {path}",
-      "referenceHint": "Dropped files stay where they are."
+      "referenceHint": "Dropped files stay where they are.",
+      "foldersTitle": "Watched folders",
+      "foldersHint": "Music added to these folders shows up on its own. Removing a folder keeps its songs.",
+      "noFolders": "No folders yet",
+      "addFolder": "Add folder…",
+      "folderDialogTitle": "Choose a folder to watch",
+      "removeFolder": "Stop watching {path}",
+      "scanned": "Scanned {when}",
+      "notScanned": "Not scanned yet",
+      "folderMissing": "Folder not found",
+      "rescan": "Rescan library",
+      "rescanning": "Rescanning…",
+      "lastScan": "Last scan {when}",
+      "loadError": "Couldn't load your folders"
     },
     "youtube": {
       "title": "YouTube player",
@@ -374,7 +389,10 @@
     "sortTitle": "Title",
     "sortArtist": "Artist",
     "sortOwner": "Owner",
-    "sortName": "Name"
+    "sortName": "Name",
+    "fileMissing": "File not found. It was moved or deleted.",
+    "fileMissingLocate": "File not found. Click to find it.",
+    "locate": "Locate file for {title}"
   },
   "localImport": {
     "dropTitle": "Drop to add to your library",
@@ -396,6 +414,10 @@
       "unreadable": "Couldn't be read",
       "copyFailed": "Couldn't be copied"
     },
-    "nothingFound": "No music files found"
+    "nothingFound": "No music files found",
+    "removed": "{count} songs removed",
+    "removedOne": "1 song removed",
+    "removedBody": "Their files were deleted from a watched folder.",
+    "upToDate": "Library is up to date"
   }
 }

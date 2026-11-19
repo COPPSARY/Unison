@@ -36,3 +36,11 @@ export function formatDate(unixSeconds: number | null | undefined): string {
 }
 
 export const formatNumber = (n: number) => num.format(n);
+
+const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** Date and time, e.g. for a folder's last scan (Unix seconds). */
+export function formatDateTime(unixSeconds: number | null | undefined): string {
+  if (!unixSeconds) return "";
+  return dateTime.format(unixSeconds * 1000);
+}

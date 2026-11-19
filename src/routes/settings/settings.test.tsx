@@ -26,6 +26,11 @@ const cmd = {
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   localCopyTarget: vi.fn(),
+  localFoldersList: vi.fn(),
+  localPickFolder: vi.fn(),
+  localFolderAdd: vi.fn(),
+  localFolderRemove: vi.fn(),
+  localRescan: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
@@ -84,6 +89,8 @@ beforeEach(() => {
   cmd.playerOutputs.mockResolvedValue(["Speakers (Realtek)", "Headphones (USB)"]);
   cmd.playerSetOutput.mockResolvedValue(null);
   cmd.playerTestSound.mockResolvedValue(null);
+  cmd.localFoldersList.mockResolvedValue([]);
+  cmd.localCopyTarget.mockResolvedValue("C:\\Users\\me\\Music\\Unison");
 });
 
 async function openDrawer() {
@@ -315,6 +322,58 @@ describe("Settings → Local files", () => {
     );
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
     expect(screen.getByText(/Copies go to C:\\Users\\me\\Music\\Unison/)).toBeInTheDocument();
+  });
+});
+
+describe("Settings → Local files → Watched folders", () => {
+  const l = strings.settings.local;
+  const music = { path: "C:\\Users\\me\\Music", lastScanAt: 1_700_000_000, exists: true };
+  const usb = { path: "E:\\Music", lastScanAt: null, exists: false };
+
+  it("lists folders with scan state and adds one through the folder picker", async () => {
+    cmd.localFoldersList.mockResolvedValue([music, usb]);
+    cmd.localPickFolder.mockResolvedValue("D:\\Albums");
+    const added = { path: "D:\\Albums", lastScanAt: null, exists: true };
+    cmd.localFolderAdd.mockResolvedValue([music, usb, added]);
+    renderRoute("/settings");
+    const list = await screen.findByRole("list", { name: l.foldersTitle });
+    expect(within(list).getByText(music.path)).toBeInTheDocument();
+    expect(within(list).getByText(/^Scanned /)).toBeInTheDocument();
+    expect(within(list).getByText(l.folderMissing)).toBeInTheDocument();
+    expect(screen.getByText(/^Last scan /)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: l.addFolder }));
+    expect(cmd.localPickFolder).toHaveBeenCalledWith(l.folderDialogTitle);
+    await waitFor(() => expect(cmd.localFolderAdd).toHaveBeenCalledWith("D:\\Albums"));
+    expect(await within(list).findByText("D:\\Albums")).toBeInTheDocument();
+    expect(within(list).getByText(l.notScanned)).toBeInTheDocument();
+  });
+
+  it("removes a folder, does nothing when the picker is cancelled, and rescans", async () => {
+    cmd.localFoldersList.mockResolvedValue([music]);
+    cmd.localFolderRemove.mockResolvedValue([]);
+    cmd.localPickFolder.mockResolvedValue(null);
+    cmd.localRescan.mockResolvedValue(7);
+    renderRoute("/settings");
+    await screen.findByText(music.path);
+    await userEvent.click(screen.getByRole("button", { name: l.addFolder }));
+    expect(cmd.localFolderAdd).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: l.removeFolder.replace("{path}", music.path) }));
+    expect(cmd.localFolderRemove).toHaveBeenCalledWith(music.path);
+    expect(await screen.findByText(l.noFolders)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: l.rescan }));
+    expect(cmd.localRescan).toHaveBeenCalledOnce();
+  });
+
+  it("shows an error when adding fails", async () => {
+    cmd.localPickFolder.mockResolvedValue("C:\\gone");
+    cmd.localFolderAdd.mockRejectedValue({ code: { type: "fileMissing" }, message: "folder not found", retryable: false });
+    renderRoute("/settings");
+    expect(await screen.findByText(l.noFolders)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: l.addFolder }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(strings.errors.fileMissing);
   });
 });
 

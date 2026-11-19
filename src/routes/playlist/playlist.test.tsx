@@ -59,7 +59,7 @@ function detail(over: Record<string, unknown> = {}) {
 
 const track = (i: number) => ({
   id: `t${i}`, title: `Track ${i}`, artists: ["A"], album: null, durationMs: 200_000, artwork: null,
-  isrc: null, sources: [{ provider: "spotify", itemId: `s${i}`, url: "https://x" }], available: true, addedAt: 1,
+  isrc: null, sources: [{ provider: "spotify", itemId: `s${i}`, url: "https://x", available: true }], available: true, addedAt: 1,
 });
 
 beforeEach(() => {
