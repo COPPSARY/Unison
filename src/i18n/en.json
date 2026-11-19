@@ -282,6 +282,11 @@
       "active": "Active",
       "restricted": "Can't be controlled",
       "devices": "Devices"
+    },
+    "output": {
+      "title": "Output",
+      "systemDefault": "System default",
+      "test": "Test sound"
     }
   },
   "sync": {

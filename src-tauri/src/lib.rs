@@ -60,7 +60,11 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         e
     })?;
     let settings = tauri::async_runtime::block_on(core::db::settings::load(&pool)).unwrap_or_default();
-    app.manage(AppState::new(pool, state::http_client()?, Arc::new(Keychain)));
+    let native = core::playback::native::NativeEngine::spawn(
+        settings.player.output_device.clone(),
+        settings.player.volume,
+    )?;
+    app.manage(AppState::new(pool, state::http_client()?, Arc::new(Keychain), Arc::new(native)));
     Ok(settings.window_material)
 }
 

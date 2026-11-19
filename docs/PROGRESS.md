@@ -42,6 +42,22 @@ Acceptance criteria:
 - Settings → Playback → Spotify row: Ready / Needs Premium / Open Spotify… / unknown + devices.
 - Status: built and tested with fixtures; waiting for the owner's live check.
 
+### UP-05 — NativeEngine (local files)
+Acceptance criteria:
+- `NativeEngine` implements `Engine` on a dedicated audio thread (rodio 0.23 + symphonia):
+  load / play / pause / stop / seek / volume (perceptual curve) / state (position, duration,
+  playing, ended); ReplayGain as a gain factor.
+- Formats via symphonia: MP3, FLAC, WAV, OGG Vorbis, AAC/M4A; opus and unknown types →
+  UnsupportedFormat; missing file → FileMissing; output problems → OutputDeviceUnavailable.
+- `player_outputs` lists output devices; `player_set_output` switches mid-track (resumes at the
+  same position) and is saved in `player.outputDevice`.
+- Settings → Playback: output device select + Test sound (quiet generated tone).
+- Tests: generated WAV decode/duration/seek and can_play rules (no device needed); an
+  ignored-by-default device test for play/seek/switch, run on the owner's PC.
+- Status (2026-11-19): built; the real-device test passed on the owner's PC (play, seek to 2.5 s,
+  output switch keeping position, pause/resume, end detected). Waiting for the owner to hear
+  Test sound and to try real MP3/FLAC/OGG/M4A files (no encoder on the PC for generated ones).
+
 ## Done
 
 - **UP-03 — YouTube embed fix** (2026-11-19): https app scheme (https://tauri.localhost), nocookie

@@ -17,6 +17,8 @@ pub struct AppState {
     pub secrets: Arc<dyn SecretStore>,
     /// Shared so the token cache and the 4-request limit apply app-wide.
     pub spotify: Arc<SpotifyClient>,
+    /// Local files + HTTP streams (UP-05/06).
+    pub native: Arc<crate::core::playback::native::NativeEngine>,
     pub sync: SyncManager,
     /// Spotify Premium answer, cached 1 h (UP-04).
     pub spotify_premium: crate::providers::spotify::player::PremiumCache,
@@ -29,13 +31,19 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(db: SqlitePool, http: reqwest::Client, secrets: Arc<dyn SecretStore>) -> Self {
+    pub fn new(
+        db: SqlitePool,
+        http: reqwest::Client,
+        secrets: Arc<dyn SecretStore>,
+        native: Arc<crate::core::playback::native::NativeEngine>,
+    ) -> Self {
         let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
         Self {
             db,
             http,
             secrets,
             spotify,
+            native,
             sync: SyncManager::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),

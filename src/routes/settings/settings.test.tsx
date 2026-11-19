@@ -19,6 +19,10 @@ const cmd = {
   youtubeTestReport: vi.fn(),
   playlistsList: vi.fn(),
   spotifyCapabilities: vi.fn(),
+  playerOutputs: vi.fn(),
+  playerSetOutput: vi.fn(),
+  playerTestSound: vi.fn(),
+  settingsGet: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
@@ -69,6 +73,9 @@ beforeEach(() => {
   cmd.syncNow.mockResolvedValue(null);
   cmd.playlistsList.mockResolvedValue([]);
   cmd.spotifyCapabilities.mockResolvedValue({ premium: true, devices: [] });
+  cmd.playerOutputs.mockResolvedValue(["Speakers (Realtek)", "Headphones (USB)"]);
+  cmd.playerSetOutput.mockResolvedValue(null);
+  cmd.playerTestSound.mockResolvedValue(null);
 });
 
 async function openDrawer() {
@@ -261,3 +268,35 @@ describe("Settings → Playback → Spotify", () => {
     expect(cmd.spotifyCapabilities).not.toHaveBeenCalled();
   });
 });
+
+describe("Settings → Playback → Output", () => {
+  it("lists outputs, switches device and plays a test sound", async () => {
+    const settings = { ...defaultsForTest(), player: { ...defaultsForTest().player, outputDevice: "Headphones (USB)" } };
+    cmd.settingsGet.mockResolvedValue(settings);
+    renderRoute("/settings");
+    const select = await screen.findByRole("combobox", { name: strings.settings.output.title });
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByRole("option", { name: "Headphones (USB)" }));
+    await waitFor(() => expect(cmd.playerSetOutput).toHaveBeenCalledWith("Headphones (USB)"));
+    await waitFor(() => expect(cmd.settingsGet).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: strings.settings.output.test }));
+    expect(cmd.playerTestSound).toHaveBeenCalledOnce();
+  });
+
+  it("shows output errors", async () => {
+    cmd.playerTestSound.mockRejectedValue({ code: { type: "outputDeviceUnavailable" }, message: "x", retryable: false });
+    renderRoute("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: strings.settings.output.test }));
+    expect(await screen.findByText(strings.errors.outputDeviceUnavailable)).toBeInTheDocument();
+  });
+});
+
+function defaultsForTest() {
+  return {
+    theme: "dark" as const, glassFrost: 0.5, windowMaterial: "mica" as const, sidebarCollapsed: [], syncIntervalMin: 30, preferredSource: null,
+    player: { sourcePriority: ["local", "spotify", "youtube", "audius"] as Array<"local" | "spotify" | "youtube" | "audius">, autoFallback: true, fallbackOnErrorMidtrack: true,
+      spotifyMode: "auto" as const, youtubeRelayUrl: null, outputDevice: null as string | null, gapless: true, crossfadeMs: 0, replaygain: "track" as const, volume: 80 },
+    local: { watchedFolders: [], copyOnDrop: false, copyTarget: null, extensions: ["mp3"] },
+    audius: { enabled: true, useAsFallback: true, showInSearch: true, showTrendingRow: false },
+  };
+}

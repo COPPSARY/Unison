@@ -40,6 +40,7 @@ base64 = "0.22"
 url = "2"
 uuid = { version = "1.29", features = ["v7"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+rodio = { version = "0.23", default-features = false, features = ["playback", "flac", "mp3", "mp4", "vorbis", "wav", "wav_output"] }
 
 [lints]
 workspace = true

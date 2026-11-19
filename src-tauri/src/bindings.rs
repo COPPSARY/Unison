@@ -45,6 +45,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::youtube::youtube_test_playback,
             commands::youtube::youtube_test_report,
             commands::player::spotify_capabilities,
+            commands::player::player_outputs,
+            commands::player::player_set_output,
+            commands::player::player_test_sound,
         ])
         .events(collect_events![SyncProgress, SyncFinished, YoutubeCommand])
         .typ::<AppError>()

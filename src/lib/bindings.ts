@@ -59,6 +59,12 @@ export const commands = {
 	youtubeTestReport: (ok: boolean, code: number | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_test_report", { ok, code }, options),
 	/**  Spotify Premium (cached 1 h when known) and the current Spotify Connect devices. */
 	spotifyCapabilities: (refresh: boolean, options?: InvokeOptions) => __TAURI_INVOKE<SpotifyCapabilities_Serialize>("spotify_capabilities", { refresh }, options),
+	/**  Audio output devices for the NativeEngine (Settings → Playback → Output). */
+	playerOutputs: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("player_outputs", undefined, options),
+	/**  Switches the NativeEngine output (mid-track) and saves it (`None` = system default). */
+	playerSetOutput: (device: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("player_set_output", { device }, options),
+	/**  Plays a short quiet tone through the NativeEngine to check the output device. */
+	playerTestSound: (options?: InvokeOptions) => __TAURI_INVOKE<null>("player_test_sound", undefined, options),
 };
 
 /** Events */
