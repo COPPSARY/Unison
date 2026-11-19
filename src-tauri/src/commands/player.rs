@@ -4,7 +4,11 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::core::db;
 use crate::core::playback::engine::Engine;
+use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::native;
+use crate::core::playback::service::{PlayerAction, PlayerStateEvent};
+use crate::model::SourceKind;
+use tauri_plugin_opener::OpenerExt;
 use crate::error::{AppError, AppResult};
 use crate::providers::spotify::player::{self, SpotifyCapabilities};
 use crate::state::AppState;
@@ -70,4 +74,63 @@ pub async fn player_test_sound(app: AppHandle, state: State<'_, AppState>) -> Ap
     let volume = db::settings::load(&state.db).await?.player.volume;
     state.native.set_volume(volume).await?;
     state.native.load_path(path, 0).await
+}
+
+/// Plays `track_ids` from `start_index` (resolver picks the source unless `force_source`).
+#[tauri::command]
+#[specta::specta]
+pub async fn player_play(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_ids: Vec<String>,
+    start_index: u32,
+    force_source: Option<SourceKind>,
+) -> AppResult<()> {
+    let start = usize::try_from(start_index).unwrap_or(0);
+    let result = state.player.play(track_ids, start, force_source).await;
+    state.player.emit_state(&app).await;
+    result
+}
+
+/// Transport controls (pause, resume, next, previous, seek, volume, shuffle, repeat).
+#[tauri::command]
+#[specta::specta]
+pub async fn player_control(app: AppHandle, state: State<'_, AppState>, action: PlayerAction) -> AppResult<()> {
+    let result = state.player.control(action).await;
+    state.player.emit_state(&app).await;
+    result
+}
+
+/// Current player state (the UI also receives it as `player://state`).
+#[tauri::command]
+#[specta::specta]
+pub async fn player_state(state: State<'_, AppState>) -> AppResult<PlayerStateEvent> {
+    state.player.state().await
+}
+
+/// Every source of a track with whether it can play here ("Play from…").
+#[tauri::command]
+#[specta::specta]
+pub async fn player_sources(state: State<'_, AppState>, track_id: String) -> AppResult<Vec<SourceStatus>> {
+    state.player.sources(&track_id).await
+}
+
+/// Opens a track on its platform (e.g. Open in Spotify when it can't play here).
+#[tauri::command]
+#[specta::specta]
+pub async fn track_open_external(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: String,
+    provider: SourceKind,
+) -> AppResult<()> {
+    let sources = crate::core::playback::resolver::stored_sources(&state.db, &track_id).await?;
+    let url = sources
+        .into_iter()
+        .find(|s| s.source.kind == provider && s.source.url.starts_with("https://"))
+        .map(|s| s.source.url)
+        .ok_or_else(|| AppError::not_found("no link for this source"))?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| AppError::internal(format!("open track: {e}")))
 }

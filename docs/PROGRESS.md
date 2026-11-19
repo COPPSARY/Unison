@@ -58,6 +58,25 @@ Acceptance criteria:
   output switch keeping position, pause/resume, end detected). Waiting for the owner to hear
   Test sound and to try real MP3/FLAC/OGG/M4A files (no encoder on the PC for generated ones).
 
+### UP-09 — Resolver, fallback, wiring
+Acceptance criteria:
+- Resolver orders a track's sources by `player.sourcePriority`, skips unavailable sources and
+  Spotify when `spotifyMode` is never; engines' `can_play` decide the rest.
+- Player falls back to the next candidate when one can't play or fails to load (auto-fallback),
+  and mid-track when the engine reports failure (`fallbackOnErrorMidtrack`). Every fallback
+  writes playback_log (ended_reason = fallback) and emits `player://fallback`. Finished /
+  skipped / error rows are logged too.
+- `player_play(track_ids, start_index, force_source?)`, `player_control(action)`,
+  `player_state`, `player_sources(track_id)`; `player://state` (track, source, status,
+  position, duration, volume, shuffle, repeat) pushed on change and every 500 ms while playing.
+- UI: Play / double-click / Enter in Liked songs and playlists; player bar shows the track,
+  source and working controls (play/pause, next, previous, seek, volume, shuffle, repeat);
+  Space toggles; NoPlayableSource toast offers Open in Spotify.
+- Test matrix (fake engines): free Spotify falls to YouTube/local; blocked YouTube falls to
+  local/Audius; only-Spotify track without Premium → NoPlayableSource.
+- Status (2026-11-19): built and committed; all checks green incl. the fallback matrix. Waiting
+  for the owner's live test (double-click a liked song with Spotify open).
+
 ## Done
 
 - **UP-08 — SpotifyConnectEngine** (2026-11-19): remote control via PUT /me/player/play {uris,

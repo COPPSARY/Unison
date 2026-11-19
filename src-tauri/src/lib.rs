@@ -71,6 +71,7 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         Arc::new(Keychain),
         Arc::new(native),
         Arc::new(youtube),
+        settings.player.volume,
     ));
     Ok(settings.window_material)
 }
@@ -105,6 +106,7 @@ pub fn run() {
             let material = init_core(app)?;
             create_main_window(app, material)?;
             core::sync::scheduler::start(app.handle());
+            core::playback::service::start(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!());

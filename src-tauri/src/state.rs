@@ -19,6 +19,8 @@ pub struct AppState {
     pub spotify: Arc<SpotifyClient>,
     /// Local files + HTTP streams (UP-05/06).
     pub native: Arc<crate::core::playback::native::NativeEngine>,
+    /// Queue, resolver and engines (UP-09).
+    pub player: crate::core::playback::service::PlayerService,
     /// Official IFrame player in the webview (UP-07).
     pub youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     pub sync: SyncManager,
@@ -41,6 +43,7 @@ impl AppState {
         secrets: Arc<dyn SecretStore>,
         native: Arc<crate::core::playback::native::NativeEngine>,
         youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
+        volume: u8,
     ) -> Self {
         let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
         let spotify_premium = Arc::new(crate::providers::spotify::player::PremiumCache::default());
@@ -48,7 +51,11 @@ impl AppState {
             spotify.clone(),
             spotify_premium.clone(),
         ));
+        let engines: Vec<Arc<dyn crate::core::playback::engine::Engine>> =
+            vec![native.clone(), youtube.clone(), spotify_engine.clone()];
+        let player = crate::core::playback::service::PlayerService::new(db.clone(), engines, volume);
         Self {
+            player,
             db,
             http,
             secrets,

@@ -84,9 +84,26 @@ pub trait Engine: Send + Sync {
     async fn state(&self) -> AppResult<EngineState>;
 }
 
-/// Ordered playable candidates for a track. UP-09's resolver implements this from
+/// Fallback switches from Settings → Playback (addendum §5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Policy {
+    pub auto_fallback: bool,
+    pub fallback_on_error_midtrack: bool,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self { auto_fallback: true, fallback_on_error_midtrack: true }
+    }
+}
+
+/// Ordered playable candidates for a track. The resolver implements this from
 /// track_sources + settings; tests use fixed lists.
 #[async_trait]
 pub trait Candidates: Send + Sync {
     async fn candidates(&self, track_id: &str) -> AppResult<Vec<PlaySource>>;
+
+    async fn policy(&self) -> Policy {
+        Policy::default()
+    }
 }

@@ -36,7 +36,7 @@ const ROUTES: Array<[string, string]> = [
 
 beforeEach(() => {
   media.matches = false;
-  usePlayerStore.setState({ hasTrack: false, playing: false });
+  usePlayerStore.setState({ state: null });
   useUiStore.setState({ sidebarCollapsed: [] });
 });
 
@@ -98,16 +98,16 @@ describe("shortcuts", () => {
   });
 
   it("Space toggles playback but not while typing", async () => {
-    usePlayerStore.setState({ hasTrack: true, playing: false });
+    usePlayerStore.setState({ state: fakePlayerState("paused") });
     renderRoute("/search");
     await heading(strings.pages.search.title);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: " " });
-    expect(usePlayerStore.getState().playing).toBe(false);
+    expect(usePlayerStore.getState().state?.status).toBe("paused");
     act(() => {
       (document.activeElement as HTMLElement | null)?.blur();
     });
     fireEvent.keyDown(document.body, { key: " " });
-    expect(usePlayerStore.getState().playing).toBe(true);
+    expect(usePlayerStore.getState().state?.status).toBe("playing");
   });
 });
 
@@ -173,3 +173,19 @@ describe("sync store", () => {
     expect(useSyncStore.getState().running.spotify).toBeUndefined();
   });
 });
+
+function fakePlayerState(status: "playing" | "paused") {
+  return {
+    status,
+    trackId: "t1",
+    source: { kind: "local" as const, itemId: "f", url: "C:/a.mp3" },
+    volume: 80,
+    repeat: "off" as const,
+    shuffle: false,
+    queueLength: 1,
+    track: { title: "Song", artists: ["A"], album: null, artwork: null },
+    positionMs: 0,
+    durationMs: 1000,
+    canSeek: true,
+  };
+}

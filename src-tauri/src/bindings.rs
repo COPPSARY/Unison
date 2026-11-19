@@ -9,6 +9,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use crate::commands;
 use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::player::PlayerSnapshot;
+use crate::core::playback::service::{PlayerFallback, PlayerStateEvent};
 use crate::core::playback::youtube::YoutubeCommand;
 use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
@@ -49,11 +50,16 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::player::spotify_capabilities,
             commands::player::spotify_set_device,
             commands::player::spotify_chosen_device,
+            commands::player::player_play,
+            commands::player::player_control,
+            commands::player::player_state,
+            commands::player::player_sources,
+            commands::player::track_open_external,
             commands::player::player_outputs,
             commands::player::player_set_output,
             commands::player::player_test_sound,
         ])
-        .events(collect_events![SyncProgress, SyncFinished, YoutubeCommand])
+        .events(collect_events![SyncProgress, SyncFinished, YoutubeCommand, PlayerStateEvent, PlayerFallback])
         .typ::<AppError>()
         .typ::<Account>()
         .typ::<Track>()

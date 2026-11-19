@@ -67,6 +67,16 @@ export const commands = {
 	spotifySetDevice: (deviceId: string | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("spotify_set_device", { deviceId }, options),
 	/**  The chosen Spotify Connect device, if any. */
 	spotifyChosenDevice: (options?: InvokeOptions) => __TAURI_INVOKE<string | null>("spotify_chosen_device", undefined, options),
+	/**  Plays `track_ids` from `start_index` (resolver picks the source unless `force_source`). */
+	playerPlay: (trackIds: string[], startIndex: number, forceSource: SourceKind | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("player_play", { trackIds, startIndex, forceSource }, options),
+	/**  Transport controls (pause, resume, next, previous, seek, volume, shuffle, repeat). */
+	playerControl: (action: PlayerAction, options?: InvokeOptions) => __TAURI_INVOKE<null>("player_control", { action }, options),
+	/**  Current player state (the UI also receives it as `player://state`). */
+	playerState: (options?: InvokeOptions) => __TAURI_INVOKE<PlayerStateEvent_Serialize>("player_state", undefined, options),
+	/**  Every source of a track with whether it can play here ("Play from…"). */
+	playerSources: (trackId: string, options?: InvokeOptions) => __TAURI_INVOKE<SourceStatus_Serialize[]>("player_sources", { trackId }, options),
+	/**  Opens a track on its platform (e.g. Open in Spotify when it can't play here). */
+	trackOpenExternal: (trackId: string, provider: SourceKind, options?: InvokeOptions) => __TAURI_INVOKE<null>("track_open_external", { trackId, provider }, options),
 	/**  Audio output devices for the NativeEngine (Settings → Playback → Output). */
 	playerOutputs: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("player_outputs", undefined, options),
 	/**  Switches the NativeEngine output (mid-track) and saves it (`None` = system default). */
@@ -77,6 +87,8 @@ export const commands = {
 
 /** Events */
 export const events = {
+	playerFallback: makeEvent<PlayerFallback, PlayerFallback>("player://fallback"),
+	playerState: makeEvent<PlayerStateEvent_Serialize, PlayerStateEvent_Deserialize>("player://state"),
 	playerYoutubeCommand: makeEvent<YoutubeCommand, YoutubeCommand>("player://youtube-command"),
 	syncFinished: makeEvent<SyncFinished_Serialize, SyncFinished_Deserialize>("sync://finished"),
 	syncProgress: makeEvent<SyncProgress_Serialize, SyncProgress_Deserialize>("sync://progress"),
@@ -216,6 +228,25 @@ export type LocalSettings_Serialize = {
 	extensions: string[],
 };
 
+/**  Title, artists and artwork of the current track (for the player bar). */
+export type NowPlaying = NowPlaying_Serialize | NowPlaying_Deserialize;
+
+/**  Title, artists and artwork of the current track (for the player bar). */
+export type NowPlaying_Deserialize = {
+	title: string,
+	artists: string[],
+	album?: string | null,
+	artwork?: string | null,
+};
+
+/**  Title, artists and artwork of the current track (for the player bar). */
+export type NowPlaying_Serialize = {
+	title: string,
+	artists: string[],
+	album: string | null,
+	artwork: string | null,
+};
+
 /**  One concrete way to play a track: which engine and which item. */
 export type PlaySource = {
 	kind: SourceKind,
@@ -223,6 +254,17 @@ export type PlaySource = {
 	itemId: string,
 	/**  Spotify/YouTube/Audius URL or absolute file path. */
 	url: string,
+};
+
+/**  Transport actions (spec §5 `player_control`). */
+export type PlayerAction = { type: "pause" } | { type: "resume" } | { type: "toggle" } | { type: "next" } | { type: "prev" } | { type: "seek"; positionMs: number } | { type: "volume"; volume: number } | { type: "shuffle"; on: boolean } | { type: "repeat"; mode: RepeatMode };
+
+/**  `player://fallback` payload. */
+export type PlayerFallback = {
+	trackId: string,
+	fromProvider: SourceKind,
+	toProvider: SourceKind,
+	reason: UnavailableReason,
 };
 
 export type PlayerSettings = PlayerSettings_Serialize | PlayerSettings_Deserialize;
@@ -261,10 +303,10 @@ export type PlayerSettings_Serialize = {
 	volume: number,
 };
 
-/**  What the UI sees (sent as `player://state` from UP-09 on). */
+/**  What the UI sees (part of `player://state`). */
 export type PlayerSnapshot = PlayerSnapshot_Serialize | PlayerSnapshot_Deserialize;
 
-/**  What the UI sees (sent as `player://state` from UP-09 on). */
+/**  What the UI sees (part of `player://state`). */
 export type PlayerSnapshot_Deserialize = {
 	status: PlayerStatus,
 	trackId?: string | null,
@@ -276,7 +318,7 @@ export type PlayerSnapshot_Deserialize = {
 	queueLength: number,
 };
 
-/**  What the UI sees (sent as `player://state` from UP-09 on). */
+/**  What the UI sees (part of `player://state`). */
 export type PlayerSnapshot_Serialize = {
 	status: PlayerStatus,
 	trackId: string | null,
@@ -287,6 +329,25 @@ export type PlayerSnapshot_Serialize = {
 	shuffle: boolean,
 	queueLength: number,
 };
+
+/**  `player://state` (spec §5, addendum §6). */
+export type PlayerStateEvent = PlayerStateEvent_Serialize | PlayerStateEvent_Deserialize;
+
+/**  `player://state` (spec §5, addendum §6). */
+export type PlayerStateEvent_Deserialize = {
+	track?: NowPlaying_Deserialize | null,
+	positionMs: number,
+	durationMs?: number | null,
+	canSeek: boolean,
+} & PlayerSnapshot_Deserialize;
+
+/**  `player://state` (spec §5, addendum §6). */
+export type PlayerStateEvent_Serialize = {
+	track: NowPlaying_Serialize | null,
+	positionMs: number,
+	durationMs: number | null,
+	canSeek: boolean,
+} & PlayerSnapshot_Serialize;
 
 export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | 
 /**  The current track had no playable source. */

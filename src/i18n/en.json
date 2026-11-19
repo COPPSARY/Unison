@@ -21,7 +21,9 @@
   "source": {
     "all": "All",
     "spotify": "Spotify",
-    "youtube": "YouTube"
+    "youtube": "YouTube",
+    "local": "This PC",
+    "audius": "Audius"
   },
   "sort": {
     "dateAdded": "Date added",
@@ -43,7 +45,14 @@
     "expand": "Expand",
     "seek": "Seek",
     "playerBar": "Player",
-    "youtubeVideo": "YouTube video"
+    "youtubeVideo": "YouTube video",
+    "openIn": "Open in {provider}",
+    "fallback": "Playing from {to}. {from} isn't available right now.",
+    "playingFrom": "Playing from {provider}",
+    "repeatOne": "Repeat one",
+    "repeatAll": "Repeat all",
+    "repeatOff": "Repeat off",
+    "mute": "Mute"
   },
   "track": {
     "addToPlaylist": "Add to playlist",

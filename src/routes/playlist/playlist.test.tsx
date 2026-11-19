@@ -15,6 +15,8 @@ vi.mock("@/lib/bindings", () => ({
   events: {
     syncProgress: { listen: () => Promise.resolve(() => undefined) },
     syncFinished: { listen: () => Promise.resolve(() => undefined) },
+    playerState: { listen: () => Promise.resolve(() => undefined) },
+    playerFallback: { listen: () => Promise.resolve(() => undefined) },
     playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },
   },
   commands: new Proxy(

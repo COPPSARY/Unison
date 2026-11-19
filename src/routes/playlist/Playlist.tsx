@@ -13,13 +13,20 @@ import { commands } from "@/lib/bindings";
 import { isAppError } from "@/lib/errors";
 import { formatCount, formatTotalDuration } from "@/lib/format";
 import { usePlaylist, usePlaylistTracks } from "@/lib/queries";
-import { toast } from "@/stores/toast";
+import { playTracks } from "@/lib/playback";
 
 const t = strings.pages.playlist;
 const PREFETCH_ROWS = 60;
-const playSoon = () => toast({ title: strings.library.playSoon });
 
-function Header({ detail, artwork }: { detail: PlaylistDetail; artwork: Array<string | null> }) {
+function Header({
+  detail,
+  artwork,
+  play,
+}: {
+  detail: PlaylistDetail;
+  artwork: Array<string | null>;
+  play: (shuffle: boolean) => void;
+}) {
   const { playlist } = detail;
   const provider = playlist.provider;
   const meta = [
@@ -45,10 +52,10 @@ function Header({ detail, artwork }: { detail: PlaylistDetail; artwork: Array<st
         <div className="flex items-center gap-2">
           {canPlay ? (
             <>
-              <Button variant="primary" onClick={playSoon}>
+              <Button variant="primary" onClick={() => play(false)}>
                 <Icon as={Play} fill="currentColor" /> {strings.library.play}
               </Button>
-              <Button variant="secondary" onClick={playSoon}>
+              <Button variant="secondary" onClick={() => play(true)}>
                 <Icon as={Shuffle} /> {strings.library.shuffle}
               </Button>
             </>
@@ -133,7 +140,7 @@ export function Playlist() {
     body = (
       <TrackTable
         rows={Array.from({ length: Math.min(Math.max(d.playlist.trackCount, 6), 12) }, () => undefined)}
-        onPlay={playSoon}
+        onPlay={() => undefined}
         label={d.playlist.name}
       />
     );
@@ -148,12 +155,27 @@ export function Playlist() {
       />
     );
   } else {
-    body = <TrackTable rows={rows} onVisibleEnd={onVisibleEnd} onPlay={playSoon} label={d.playlist.name} />;
+    body = (
+      <TrackTable
+        rows={rows}
+        onVisibleEnd={onVisibleEnd}
+        onPlay={(i) => void playTracks(loaded, i)}
+        label={d.playlist.name}
+      />
+    );
   }
 
   return (
     <div className="flex min-h-full flex-col px-8 pb-8">
-      {d ? <Header detail={d} artwork={loaded.slice(0, 12).map((x) => x.artwork)} /> : <HeaderSkeleton />}
+      {d ? (
+        <Header
+          detail={d}
+          artwork={loaded.slice(0, 12).map((x) => x.artwork)}
+          play={(shuffle) => void playTracks(loaded.filter((x) => x.available), 0, shuffle)}
+        />
+      ) : (
+        <HeaderSkeleton />
+      )}
       {body}
     </div>
   );

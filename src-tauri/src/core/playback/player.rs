@@ -1,6 +1,6 @@
-//! Player state machine (addendum §1). Rust owns the queue and decides which engine plays:
+//! Player state machine (addendum §1–§2). Rust owns the queue and decides which engine plays:
 //! for each track it takes the ordered candidates, asks each engine `can_play`, and loads the
-//! first that can. Only one engine plays at a time.
+//! first that can, falling back to the next candidate when one fails. Only one engine plays.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::engine::{Candidates, Engine, PlaySource, UnavailableReason};
+use super::engine::{Candidates, Engine, EngineState, PlaySource, Policy, UnavailableReason};
 use super::queue::{Queue, RepeatMode};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::SourceKind;
@@ -28,7 +28,7 @@ pub enum PlayerStatus {
     Error,
 }
 
-/// What the UI sees (sent as `player://state` from UP-09 on).
+/// What the UI sees (part of `player://state`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerSnapshot {
@@ -42,6 +42,65 @@ pub struct PlayerSnapshot {
     pub queue_length: u32,
 }
 
+/// A switch to another source of the same track (`player://fallback`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FallbackEvent {
+    pub track_id: String,
+    pub from_provider: SourceKind,
+    pub to_provider: SourceKind,
+    pub reason: UnavailableReason,
+}
+
+/// Why an item stopped playing (playback_log.ended_reason).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndedReason {
+    Finished,
+    Skipped,
+    Error,
+    Fallback,
+}
+
+impl EndedReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EndedReason::Finished => "finished",
+            EndedReason::Skipped => "skipped",
+            EndedReason::Error => "error",
+            EndedReason::Fallback => "fallback",
+        }
+    }
+}
+
+/// One playback_log row, persisted by the service.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogEntry {
+    pub track_id: String,
+    pub provider: SourceKind,
+    pub played_ms: u32,
+    pub reason: EndedReason,
+}
+
+/// The item currently loaded, for logging.
+#[derive(Debug, Clone)]
+struct Session {
+    track_id: String,
+    kind: SourceKind,
+    last_pos: u32,
+}
+
+fn reason_for(err: &AppError) -> UnavailableReason {
+    match &err.code {
+        ErrorCode::SpotifyPremiumRequired => UnavailableReason::PremiumRequired,
+        ErrorCode::NoSpotifyDevice => UnavailableReason::NoDevice,
+        ErrorCode::FileMissing => UnavailableReason::FileMissing,
+        ErrorCode::UnsupportedFormat | ErrorCode::DrmProtected => UnavailableReason::UnsupportedFormat,
+        ErrorCode::YoutubeEmbedBlocked { .. } | ErrorCode::NotEmbeddable => UnavailableReason::NotEmbeddable,
+        ErrorCode::NeedsReconnect => UnavailableReason::NotConnected,
+        _ => UnavailableReason::Offline,
+    }
+}
+
 pub struct Player {
     engines: HashMap<SourceKind, Arc<dyn Engine>>,
     candidates: Arc<dyn Candidates>,
@@ -49,8 +108,13 @@ pub struct Player {
     status: PlayerStatus,
     active: Option<PlaySource>,
     volume: u8,
-    /// Why each candidate of the last failed load was skipped (for logs / UI).
+    /// Why each candidate of the last load was skipped (for logs / UI).
     last_skips: Vec<(SourceKind, UnavailableReason)>,
+    /// Source forced by "Play from…" for the next load only.
+    force: Option<SourceKind>,
+    session: Option<Session>,
+    fallbacks: Vec<FallbackEvent>,
+    log: Vec<LogEntry>,
 }
 
 impl Player {
@@ -66,7 +130,17 @@ impl Player {
             active: None,
             volume: 80,
             last_skips: Vec::new(),
+            force: None,
+            session: None,
+            fallbacks: Vec::new(),
+            log: Vec::new(),
         }
+    }
+
+    /// Starting volume (0–100) before anything is loaded.
+    pub fn with_volume(mut self, volume: u8) -> Self {
+        self.volume = volume.min(100);
+        self
     }
 
     pub fn snapshot(&self) -> PlayerSnapshot {
@@ -85,18 +159,38 @@ impl Player {
         &self.last_skips
     }
 
+    /// Fallbacks since the last call (emitted as `player://fallback`).
+    pub fn take_fallbacks(&mut self) -> Vec<FallbackEvent> {
+        std::mem::take(&mut self.fallbacks)
+    }
+
+    /// playback_log rows since the last call.
+    pub fn take_log(&mut self) -> Vec<LogEntry> {
+        std::mem::take(&mut self.log)
+    }
+
     fn active_engine(&self) -> Option<Arc<dyn Engine>> {
         self.active.as_ref().and_then(|s| self.engines.get(&s.kind).cloned())
     }
 
-    /// Replaces the queue with `track_ids` and plays from `start`.
-    pub async fn play(&mut self, track_ids: Vec<String>, start: usize) -> AppResult<()> {
-        self.queue.set(track_ids, start);
-        self.load_current().await
+    /// Closes the current session into the log.
+    fn end_session(&mut self, reason: EndedReason) {
+        if let Some(s) = self.session.take() {
+            self.log.push(LogEntry { track_id: s.track_id, provider: s.kind, played_ms: s.last_pos, reason });
+        }
     }
 
-    /// Loads the current queue item through the first engine that can play it.
-    async fn load_current(&mut self) -> AppResult<()> {
+    /// Replaces the queue with `track_ids` and plays from `start`, optionally from one source.
+    pub async fn play(&mut self, track_ids: Vec<String>, start: usize, force: Option<SourceKind>) -> AppResult<()> {
+        self.end_session(EndedReason::Skipped);
+        self.queue.set(track_ids, start);
+        self.force = force;
+        self.load_current(&[]).await
+    }
+
+    /// Loads the current queue item through the first engine that can play it, skipping
+    /// `exclude` (sources that already failed for this item).
+    async fn load_current(&mut self, exclude: &[PlaySource]) -> AppResult<()> {
         let Some(track_id) = self.queue.current().map(str::to_owned) else {
             self.stop_active().await?;
             self.status = PlayerStatus::Idle;
@@ -104,14 +198,31 @@ impl Player {
         };
         self.status = PlayerStatus::Loading;
         self.last_skips.clear();
-        let candidates = self.candidates.candidates(&track_id).await?;
+        let policy: Policy = self.candidates.policy().await;
+        let force = self.force.take();
+        let candidates: Vec<PlaySource> = self
+            .candidates
+            .candidates(&track_id)
+            .await?
+            .into_iter()
+            .filter(|c| force.is_none_or(|f| c.kind == f))
+            .filter(|c| !exclude.contains(c))
+            .collect();
 
+        let mut first_failure: Option<(SourceKind, UnavailableReason)> = None;
+        let mut last_error: Option<AppError> = None;
+        let count = candidates.len();
         for source in candidates {
+            if first_failure.is_some() && !policy.auto_fallback {
+                break;
+            }
             let Some(engine) = self.engines.get(&source.kind).cloned() else {
+                first_failure.get_or_insert((source.kind, UnavailableReason::NotConnected));
                 self.last_skips.push((source.kind, UnavailableReason::NotConnected));
                 continue;
             };
             if let Err(reason) = engine.can_play(&source).await {
+                first_failure.get_or_insert((source.kind, reason.clone()));
                 self.last_skips.push((source.kind, reason));
                 continue;
             }
@@ -122,7 +233,21 @@ impl Player {
                 }
             }
             engine.set_volume(self.volume).await?;
-            engine.load(&source, 0).await?;
+            if let Err(err) = engine.load(&source, 0).await {
+                let reason = reason_for(&err);
+                tracing::info!(kind = ?source.kind, error = %err, "source failed to load");
+                first_failure.get_or_insert((source.kind, reason.clone()));
+                self.last_skips.push((source.kind, reason));
+                last_error = Some(err);
+                continue;
+            }
+            if let Some((from, reason)) = first_failure.take() {
+                if from != source.kind {
+                    self.log.push(LogEntry { track_id: track_id.clone(), provider: from, played_ms: 0, reason: EndedReason::Fallback });
+                    self.fallbacks.push(FallbackEvent { track_id: track_id.clone(), from_provider: from, to_provider: source.kind, reason });
+                }
+            }
+            self.session = Some(Session { track_id: track_id.clone(), kind: source.kind, last_pos: 0 });
             self.active = Some(source);
             self.status = PlayerStatus::Playing;
             return Ok(());
@@ -130,7 +255,11 @@ impl Player {
 
         self.stop_active().await?;
         self.status = PlayerStatus::Error;
-        Err(AppError::new(ErrorCode::NoPlayableSource, "no source of this track can play here"))
+        // One source that failed with a specific reason says more than "no playable source".
+        match last_error {
+            Some(err) if count == 1 => Err(err),
+            _ => Err(AppError::new(ErrorCode::NoPlayableSource, "no source of this track can play here")),
+        }
     }
 
     async fn stop_active(&mut self) -> AppResult<()> {
@@ -166,8 +295,9 @@ impl Player {
     }
 
     pub async fn next(&mut self) -> AppResult<()> {
+        self.end_session(EndedReason::Skipped);
         if self.queue.next(true).is_some() {
-            self.load_current().await
+            self.load_current(&[]).await
         } else {
             self.stop_active().await?;
             self.status = PlayerStatus::Idle;
@@ -182,19 +312,68 @@ impl Player {
                 return engine.seek(0).await;
             }
         }
+        self.end_session(EndedReason::Skipped);
         self.queue.prev();
-        self.load_current().await
+        self.load_current(&[]).await
     }
 
     /// Called when the active engine reports the end of the track: auto-advance.
     pub async fn on_ended(&mut self) -> AppResult<()> {
+        self.end_session(EndedReason::Finished);
         if self.queue.next(false).is_some() {
-            self.load_current().await
+            self.load_current(&[]).await
         } else {
             self.stop_active().await?;
             self.status = PlayerStatus::Idle;
             Ok(())
         }
+    }
+
+    /// Periodic check by the service: tracks position, advances at the end, falls back to
+    /// another source of the same track when the engine failed mid-track.
+    pub async fn tick(&mut self) -> AppResult<Option<EngineState>> {
+        if !matches!(self.status, PlayerStatus::Playing | PlayerStatus::Paused) {
+            return Ok(None);
+        }
+        let Some(engine) = self.active_engine() else { return Ok(None) };
+        let state = engine.state().await?;
+        if let Some(s) = self.session.as_mut() {
+            s.last_pos = s.last_pos.max(state.position_ms);
+        }
+        if state.failed {
+            let failed = self.active.clone();
+            let policy = self.candidates.policy().await;
+            if let (Some(failed), true) = (failed, policy.fallback_on_error_midtrack) {
+                let track_id = self.queue.current().unwrap_or_default().to_owned();
+                self.end_session(EndedReason::Fallback);
+                self.stop_active().await?;
+                let before = self.fallbacks.len();
+                let result = self.load_current(std::slice::from_ref(&failed)).await;
+                if result.is_ok() && self.fallbacks.len() == before {
+                    if let Some(to) = self.active.as_ref().map(|a| a.kind) {
+                        self.fallbacks.push(FallbackEvent {
+                            track_id,
+                            from_provider: failed.kind,
+                            to_provider: to,
+                            reason: UnavailableReason::Offline,
+                        });
+                    }
+                }
+                result?;
+            } else {
+                self.end_session(EndedReason::Error);
+                self.on_ended().await?;
+            }
+            return Ok(None);
+        }
+        if state.ended {
+            self.on_ended().await?;
+            return Ok(None);
+        }
+        if state.playing && self.status == PlayerStatus::Paused {
+            self.status = PlayerStatus::Playing;
+        }
+        Ok(Some(state))
     }
 
     pub async fn seek(&mut self, position_ms: u32) -> AppResult<()> {
@@ -224,27 +403,50 @@ impl Player {
     pub fn queue(&self) -> &Queue {
         &self.queue
     }
+
+    /// Current engine state (position / duration) for the UI.
+    pub async fn engine_state(&self) -> AppResult<Option<EngineState>> {
+        match self.active_engine() {
+            Some(e) => e.state().await.map(Some),
+            None => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::core::playback::engine::EngineState;
     use crate::core::playback::queue::Rng;
     use async_trait::async_trait;
     use std::sync::Mutex;
 
-    /// Records every call; `blocked` items fail `can_play`.
+    /// Records every call; `blocked` items fail `can_play`, `load_error` makes `load` fail,
+    /// `failed` makes `state()` report a failure.
     pub struct FakeEngine {
         pub kind: SourceKind,
         pub log: Arc<Mutex<Vec<String>>>,
-        pub blocked: Vec<String>,
+        pub blocked: Vec<(String, UnavailableReason)>,
+        pub load_error: Option<ErrorCode>,
         pub position_ms: Mutex<u32>,
+        pub failed: Mutex<bool>,
+        pub ended: Mutex<bool>,
     }
 
     impl FakeEngine {
         pub fn new(kind: SourceKind, log: Arc<Mutex<Vec<String>>>) -> Arc<Self> {
-            Arc::new(Self { kind, log, blocked: Vec::new(), position_ms: Mutex::new(0) })
+            Arc::new(Self::plain(kind, log))
+        }
+
+        pub fn plain(kind: SourceKind, log: Arc<Mutex<Vec<String>>>) -> Self {
+            Self {
+                kind,
+                log,
+                blocked: Vec::new(),
+                load_error: None,
+                position_ms: Mutex::new(0),
+                failed: Mutex::new(false),
+                ended: Mutex::new(false),
+            }
         }
 
         fn rec(&self, what: String) {
@@ -263,14 +465,18 @@ pub(crate) mod tests {
             }
         }
         async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason> {
-            if self.blocked.contains(&source.item_id) {
-                Err(UnavailableReason::NotEmbeddable)
-            } else {
-                Ok(())
+            match self.blocked.iter().find(|(id, _)| *id == source.item_id || id == "*") {
+                Some((_, reason)) => Err(reason.clone()),
+                None => Ok(()),
             }
         }
         async fn load(&self, source: &PlaySource, _start: u32) -> AppResult<()> {
+            if let Some(code) = &self.load_error {
+                return Err(AppError::new(code.clone(), "fake load error"));
+            }
             *self.position_ms.lock().unwrap() = 0;
+            *self.failed.lock().unwrap() = false;
+            *self.ended.lock().unwrap() = false;
             self.rec(format!("load {}", source.item_id));
             Ok(())
         }
@@ -296,12 +502,18 @@ pub(crate) mod tests {
             Ok(())
         }
         async fn state(&self) -> AppResult<EngineState> {
-            Ok(EngineState { position_ms: *self.position_ms.lock().unwrap(), ..EngineState::default() })
+            Ok(EngineState {
+                position_ms: *self.position_ms.lock().unwrap(),
+                playing: true,
+                failed: *self.failed.lock().unwrap(),
+                ended: *self.ended.lock().unwrap(),
+                ..EngineState::default()
+            })
         }
     }
 
     /// Track "tN" → candidates by a fixed map; default: one local source "tN-local".
-    pub struct FixedCandidates(pub HashMap<String, Vec<PlaySource>>);
+    pub struct FixedCandidates(pub HashMap<String, Vec<PlaySource>>, pub Policy);
 
     #[async_trait]
     impl Candidates for FixedCandidates {
@@ -309,6 +521,9 @@ pub(crate) mod tests {
             Ok(self.0.get(track_id).cloned().unwrap_or_else(|| {
                 vec![PlaySource { kind: SourceKind::Local, item_id: format!("{track_id}-local"), url: String::new() }]
             }))
+        }
+        async fn policy(&self) -> Policy {
+            self.1
         }
     }
 
@@ -320,22 +535,30 @@ pub(crate) mod tests {
         (0..n).map(|i| format!("t{i}")).collect()
     }
 
-    fn player(map: HashMap<String, Vec<PlaySource>>, blocked_yt: Vec<String>) -> (Player, Arc<Mutex<Vec<String>>>) {
-        let log = Arc::new(Mutex::new(Vec::new()));
-        let local = FakeEngine::new(SourceKind::Local, log.clone());
-        let yt = Arc::new(FakeEngine { kind: SourceKind::Youtube, log: log.clone(), blocked: blocked_yt, position_ms: Mutex::new(0) });
-        let p = Player::new(vec![local, yt], Arc::new(FixedCandidates(map)), Queue::new(Rng::seeded(3)));
-        (p, log)
+    type Log = Arc<Mutex<Vec<String>>>;
+
+    fn player_with(engines: Vec<Arc<dyn Engine>>, map: HashMap<String, Vec<PlaySource>>, policy: Policy) -> Player {
+        Player::new(engines, Arc::new(FixedCandidates(map, policy)), Queue::new(Rng::seeded(3)))
     }
 
-    fn loads(log: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
+    fn player(map: HashMap<String, Vec<PlaySource>>, blocked_yt: Vec<String>) -> (Player, Log) {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let local = FakeEngine::new(SourceKind::Local, log.clone());
+        let yt = Arc::new(FakeEngine {
+            blocked: blocked_yt.into_iter().map(|b| (b, UnavailableReason::NotEmbeddable)).collect(),
+            ..FakeEngine::plain(SourceKind::Youtube, log.clone())
+        });
+        (player_with(vec![local, yt], map, Policy::default()), log)
+    }
+
+    fn loads(log: &Log) -> Vec<String> {
         log.lock().unwrap().iter().filter(|l| l.contains("load")).cloned().collect()
     }
 
     #[tokio::test]
     async fn plays_next_prev_and_auto_advances_to_idle() {
         let (mut p, log) = player(HashMap::new(), vec![]);
-        p.play(ids(3), 0).await.unwrap();
+        p.play(ids(3), 0, None).await.unwrap();
         assert_eq!(p.snapshot().status, PlayerStatus::Playing);
         p.next().await.unwrap();
         p.on_ended().await.unwrap();
@@ -347,12 +570,14 @@ pub(crate) mod tests {
         p.on_ended().await.unwrap();
         assert_eq!(p.snapshot().status, PlayerStatus::Idle, "end of queue");
         assert!(log.lock().unwrap().last().unwrap().ends_with("stop"));
+        let reasons: Vec<_> = p.take_log().into_iter().map(|l| l.reason).collect();
+        assert_eq!(reasons, vec![EndedReason::Skipped, EndedReason::Finished, EndedReason::Skipped, EndedReason::Skipped, EndedReason::Finished]);
     }
 
     #[tokio::test]
     async fn prev_restarts_after_three_seconds() {
         let (mut p, log) = player(HashMap::new(), vec![]);
-        p.play(ids(2), 1).await.unwrap();
+        p.play(ids(2), 1, None).await.unwrap();
         p.seek(10_000).await.unwrap();
         p.prev().await.unwrap();
         assert_eq!(p.snapshot().track_id.as_deref(), Some("t1"), "restarted, not moved");
@@ -362,7 +587,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn repeat_one_and_shuffle_through_the_player() {
         let (mut p, _log) = player(HashMap::new(), vec![]);
-        p.play(ids(4), 0).await.unwrap();
+        p.play(ids(4), 0, None).await.unwrap();
         p.set_repeat(RepeatMode::One);
         p.on_ended().await.unwrap();
         assert_eq!(p.snapshot().track_id.as_deref(), Some("t0"));
@@ -384,10 +609,9 @@ pub(crate) mod tests {
         map.insert("t0".to_owned(), vec![src(SourceKind::Local, "f0")]);
         map.insert("t1".to_owned(), vec![src(SourceKind::Youtube, "blocked"), src(SourceKind::Youtube, "v1")]);
         let (mut p, log) = player(map, vec!["blocked".into()]);
-        p.play(ids(2), 0).await.unwrap();
+        p.play(ids(2), 0, None).await.unwrap();
         p.next().await.unwrap();
-        let snap = p.snapshot();
-        assert_eq!(snap.source, Some(src(SourceKind::Youtube, "v1")));
+        assert_eq!(p.snapshot().source, Some(src(SourceKind::Youtube, "v1")));
         assert_eq!(p.last_skips(), &[(SourceKind::Youtube, UnavailableReason::NotEmbeddable)]);
         let entries = log.lock().unwrap().clone();
         let pause_local = entries.iter().position(|l| l == "Local:pause").unwrap();
@@ -396,21 +620,10 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn no_playable_source_is_an_error_state() {
-        let mut map = HashMap::new();
-        map.insert("t0".to_owned(), vec![src(SourceKind::Spotify, "sp")]); // no Spotify engine
-        let (mut p, _log) = player(map, vec![]);
-        let err = p.play(ids(1), 0).await.unwrap_err();
-        assert_eq!(err.code, ErrorCode::NoPlayableSource);
-        assert_eq!(p.snapshot().status, PlayerStatus::Error);
-        assert_eq!(p.last_skips(), &[(SourceKind::Spotify, UnavailableReason::NotConnected)]);
-    }
-
-    #[tokio::test]
     async fn volume_toggle_and_seek_go_to_the_active_engine() {
         let (mut p, log) = player(HashMap::new(), vec![]);
         p.toggle().await.unwrap(); // idle: no-op
-        p.play(ids(1), 0).await.unwrap();
+        p.play(ids(1), 0, None).await.unwrap();
         p.set_volume(250).await.unwrap();
         assert_eq!(p.snapshot().volume, 100);
         p.toggle().await.unwrap();
@@ -420,5 +633,137 @@ pub(crate) mod tests {
         let entries = log.lock().unwrap().clone();
         assert!(entries.contains(&"Local:volume 100".to_owned()));
         assert!(entries.ends_with(&["Local:pause".to_owned(), "Local:play".to_owned()]));
+    }
+
+    // ---- Fallback test matrix (addendum UP-09) ----
+
+    fn matrix_engines(log: &Log, spotify_premium: bool, youtube_blocked: bool) -> Vec<Arc<dyn Engine>> {
+        let spotify = FakeEngine {
+            blocked: if spotify_premium { vec![] } else { vec![("*".into(), UnavailableReason::PremiumRequired)] },
+            ..FakeEngine::plain(SourceKind::Spotify, log.clone())
+        };
+        let youtube = FakeEngine {
+            blocked: if youtube_blocked { vec![("*".into(), UnavailableReason::NotEmbeddable)] } else { vec![] },
+            ..FakeEngine::plain(SourceKind::Youtube, log.clone())
+        };
+        vec![
+            Arc::new(spotify),
+            Arc::new(youtube),
+            FakeEngine::new(SourceKind::Local, log.clone()),
+            FakeEngine::new(SourceKind::Audius, log.clone()),
+        ]
+    }
+
+    fn all_sources() -> HashMap<String, Vec<PlaySource>> {
+        let mut map = HashMap::new();
+        map.insert(
+            "t0".to_owned(),
+            vec![src(SourceKind::Spotify, "sp"), src(SourceKind::Youtube, "yt"), src(SourceKind::Local, "file"), src(SourceKind::Audius, "au")],
+        );
+        map
+    }
+
+    #[tokio::test]
+    async fn free_spotify_user_plays_via_youtube_and_logs_a_fallback() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let mut p = player_with(matrix_engines(&log, false, false), all_sources(), Policy::default());
+        p.play(ids(1), 0, None).await.unwrap();
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Youtube));
+        let fb = p.take_fallbacks();
+        assert_eq!(fb.len(), 1);
+        assert_eq!((fb[0].from_provider, fb[0].to_provider, fb[0].reason.clone()), (SourceKind::Spotify, SourceKind::Youtube, UnavailableReason::PremiumRequired));
+        let rows = p.take_log();
+        assert_eq!(rows[0].reason, EndedReason::Fallback);
+        assert_eq!(rows[0].provider, SourceKind::Spotify);
+    }
+
+    #[tokio::test]
+    async fn blocked_youtube_falls_to_local() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let mut map = HashMap::new();
+        map.insert("t0".to_owned(), vec![src(SourceKind::Youtube, "yt"), src(SourceKind::Local, "file"), src(SourceKind::Audius, "au")]);
+        let mut p = player_with(matrix_engines(&log, true, true), map, Policy::default());
+        p.play(ids(1), 0, None).await.unwrap();
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Local));
+        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::NotEmbeddable);
+    }
+
+    #[tokio::test]
+    async fn only_spotify_without_premium_is_no_playable_source() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let mut map = HashMap::new();
+        map.insert("t0".to_owned(), vec![src(SourceKind::Spotify, "sp")]);
+        let mut p = player_with(matrix_engines(&log, false, false), map, Policy::default());
+        let err = p.play(ids(1), 0, None).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::NoPlayableSource);
+        assert_eq!(p.snapshot().status, PlayerStatus::Error);
+        assert_eq!(p.last_skips(), &[(SourceKind::Spotify, UnavailableReason::PremiumRequired)]);
+    }
+
+    #[tokio::test]
+    async fn a_failed_load_falls_back_and_a_single_failure_keeps_its_error() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let spotify = FakeEngine { load_error: Some(ErrorCode::NoSpotifyDevice), ..FakeEngine::plain(SourceKind::Spotify, log.clone()) };
+        let engines: Vec<Arc<dyn Engine>> = vec![Arc::new(spotify), FakeEngine::new(SourceKind::Youtube, log.clone())];
+        let mut map = HashMap::new();
+        map.insert("t0".to_owned(), vec![src(SourceKind::Spotify, "sp"), src(SourceKind::Youtube, "yt")]);
+        map.insert("t1".to_owned(), vec![src(SourceKind::Spotify, "sp1")]);
+        let mut p = player_with(engines, map, Policy::default());
+        p.play(ids(2), 0, None).await.unwrap();
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Youtube));
+        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::NoDevice);
+        let err = p.next().await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::NoSpotifyDevice, "the specific reason is kept");
+    }
+
+    #[tokio::test]
+    async fn auto_fallback_off_stops_at_the_first_source() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let policy = Policy { auto_fallback: false, ..Policy::default() };
+        let mut p = player_with(matrix_engines(&log, false, false), all_sources(), policy);
+        assert_eq!(p.play(ids(1), 0, None).await.unwrap_err().code, ErrorCode::NoPlayableSource);
+    }
+
+    #[tokio::test]
+    async fn forced_source_plays_only_that_kind() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let mut p = player_with(matrix_engines(&log, true, false), all_sources(), Policy::default());
+        p.play(ids(1), 0, Some(SourceKind::Audius)).await.unwrap();
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Audius));
+        assert!(p.take_fallbacks().is_empty());
+    }
+
+    #[tokio::test]
+    async fn mid_track_failure_falls_back_to_the_next_source_of_the_same_song() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let local = FakeEngine::new(SourceKind::Local, log.clone());
+        let audius = Arc::new(FakeEngine::plain(SourceKind::Audius, log.clone()));
+        let engines: Vec<Arc<dyn Engine>> = vec![audius.clone(), local];
+        let mut map = HashMap::new();
+        map.insert("t0".to_owned(), vec![src(SourceKind::Audius, "au"), src(SourceKind::Local, "file")]);
+        let mut p = player_with(engines, map, Policy::default());
+        p.play(ids(2), 0, None).await.unwrap();
+        *audius.position_ms.lock().unwrap() = 42_000;
+        assert!(p.tick().await.unwrap().is_some());
+        *audius.failed.lock().unwrap() = true;
+        p.tick().await.unwrap();
+        let snap = p.snapshot();
+        assert_eq!(snap.track_id.as_deref(), Some("t0"), "same song, not a substitute");
+        assert_eq!(snap.source.map(|s| s.kind), Some(SourceKind::Local));
+        let fb = p.take_fallbacks();
+        assert_eq!((fb[0].from_provider, fb[0].to_provider), (SourceKind::Audius, SourceKind::Local));
+        let rows = p.take_log();
+        assert_eq!(rows[0], LogEntry { track_id: "t0".into(), provider: SourceKind::Audius, played_ms: 42_000, reason: EndedReason::Fallback });
+    }
+
+    #[tokio::test]
+    async fn tick_advances_when_the_engine_reports_the_end() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let local = Arc::new(FakeEngine::plain(SourceKind::Local, log.clone()));
+        let mut p = player_with(vec![local.clone()], HashMap::new(), Policy::default());
+        p.play(ids(2), 0, None).await.unwrap();
+        *local.ended.lock().unwrap() = true;
+        p.tick().await.unwrap();
+        assert_eq!(p.snapshot().track_id.as_deref(), Some("t1"));
     }
 }

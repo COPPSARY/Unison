@@ -309,3 +309,32 @@ textarea,
     background: var(--fill-tertiary);
   }
 }
+
+/* ---------------------------------------------------------------- Sliders (seek, volume) */
+/* Thin track, accent fill up to --pct, small thumb shown on hover/focus. */
+.u-range {
+  appearance: none;
+  background: linear-gradient(to right, var(--accent) var(--pct, 0%), var(--fill-secondary) var(--pct, 0%));
+  border-radius: 9999px;
+  cursor: pointer;
+}
+.u-range:disabled {
+  cursor: default;
+  background: var(--fill-tertiary);
+}
+.u-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--text);
+  opacity: 0;
+  transition: opacity var(--duration-tone) var(--ease);
+}
+.u-range:hover::-webkit-slider-thumb,
+.u-range:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+.u-range:disabled::-webkit-slider-thumb {
+  opacity: 0;
+}

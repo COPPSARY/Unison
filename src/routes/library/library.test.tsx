@@ -11,12 +11,16 @@ const cmd = {
   playlistsList: vi.fn(),
   accountsList: vi.fn(),
   syncNow: vi.fn(),
+  playerPlay: vi.fn(),
+  playerState: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
   events: {
     syncProgress: { listen: () => Promise.resolve(() => undefined) },
     syncFinished: { listen: () => Promise.resolve(() => undefined) },
+    playerState: { listen: () => Promise.resolve(() => undefined) },
+    playerFallback: { listen: () => Promise.resolve(() => undefined) },
     playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },
   },
   commands: new Proxy(
@@ -113,8 +117,9 @@ describe("Liked songs", () => {
     rows[0]?.focus();
     await userEvent.keyboard("{ArrowDown}");
     await waitFor(() => expect(document.activeElement?.getAttribute("data-row")).toBe("1"));
+    cmd.playerPlay.mockResolvedValue(null);
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByText(L.playSoon)).toBeInTheDocument();
+    await waitFor(() => expect(cmd.playerPlay).toHaveBeenCalledWith(["id1", "id2", "id3"], 1, null));
   });
 
   it("shows skeleton rows while loading", async () => {

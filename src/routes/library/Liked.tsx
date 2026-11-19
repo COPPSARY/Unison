@@ -11,16 +11,22 @@ import { strings } from "@/i18n";
 import type { Track_Serialize as Track } from "@/lib/bindings";
 import { formatCount, formatTotalDuration } from "@/lib/format";
 import { LIKED_PAGE, useLikedStats, useLikedTracks, useSyncNow } from "@/lib/queries";
-import { toast } from "@/stores/toast";
+import { playTracks } from "@/lib/playback";
 
 const t = strings.pages.liked;
 /** Load the next page when the last visible row is this close to the loaded end. */
 const PREFETCH_ROWS = 60;
 
-/** Playback arrives with T-40 / T-42; until then say so instead of failing silently. */
-const playSoon = () => toast({ title: strings.library.playSoon });
 
-function Header({ artwork, stats }: { artwork: Array<string | null>; stats: { count: number; durationMs: number | null } | undefined }) {
+function Header({
+  artwork,
+  stats,
+  play,
+}: {
+  artwork: Array<string | null>;
+  stats: { count: number; durationMs: number | null } | undefined;
+  play: (shuffle: boolean) => void;
+}) {
   const syncNow = useSyncNow();
   return (
     <div className="flex items-end gap-6 pt-2 pb-6">
@@ -37,10 +43,10 @@ function Header({ artwork, stats }: { artwork: Array<string | null>; stats: { co
           )}
         </p>
         <div className="flex items-center gap-2">
-          <Button variant="primary" onClick={playSoon} disabled={!stats?.count}>
+          <Button variant="primary" onClick={() => play(false)} disabled={!stats?.count}>
             <Icon as={Play} fill="currentColor" /> {strings.library.play}
           </Button>
-          <Button variant="secondary" onClick={playSoon} disabled={!stats?.count}>
+          <Button variant="secondary" onClick={() => play(true)} disabled={!stats?.count}>
             <Icon as={Shuffle} /> {strings.library.shuffle}
           </Button>
           <Menu>
@@ -106,14 +112,16 @@ export function Liked() {
     body = (
       <TrackTable
         rows={Array.from({ length: Math.min(LIKED_PAGE, 12) }, () => undefined)}
-        onPlay={playSoon}
+        onPlay={() => undefined}
         label={t.title}
       />
     );
   } else if (total === 0 && filtered) {
     body = <NoResults query={controls.query || strings.source[controls.source === "all" ? "all" : controls.source]} onClear={clear} />;
   } else {
-    body = <TrackTable rows={rows} onVisibleEnd={onVisibleEnd} onPlay={playSoon} label={t.title} />;
+    body = (
+      <TrackTable rows={rows} onVisibleEnd={onVisibleEnd} onPlay={(i) => void playTracks(loaded, i)} label={t.title} />
+    );
   }
 
   return (
@@ -121,6 +129,7 @@ export function Liked() {
       <Header
         artwork={loaded.slice(0, 12).map((x) => x.artwork)}
         stats={stats.data ? { count: stats.data.count, durationMs: stats.data.durationMs } : undefined}
+        play={(shuffle) => void playTracks(loaded.filter((x) => x.available), 0, shuffle)}
       />
       <LibraryToolbar controls={controls} />
       {body}

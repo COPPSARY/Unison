@@ -1,4 +1,4 @@
-import type { ProviderId } from "@/lib/bindings";
+import type { SourceKind } from "@/lib/bindings";
 import { strings } from "@/i18n";
 import { cn } from "@/lib/cn";
 
@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
  * Monochrome 12 px source badge (Plan: "Source badges", text-muted). Simplified marks that
  * name the platform; brand colours are never used in Unison's chrome.
  */
-export function SourceMark({ provider, className }: { provider: ProviderId; className?: string }) {
+export function SourceMark({ provider, className }: { provider: SourceKind; className?: string | undefined }) {
   const label = strings.source[provider];
   return (
     <svg
@@ -18,7 +18,14 @@ export function SourceMark({ provider, className }: { provider: ProviderId; clas
       className={cn("shrink-0 text-text-muted", className)}
     >
       <title>{label}</title>
-      {provider === "spotify" ? (
+      {provider === "local" ? (
+        <>
+          <rect x="1" y="2" width="10" height="7" rx="1.5" fill="currentColor" />
+          <rect x="4" y="9.5" width="4" height="1.2" rx="0.6" fill="currentColor" />
+        </>
+      ) : provider === "audius" ? (
+        <path d="M6 1.2 11 10.2H1z" fill="currentColor" />
+      ) : provider === "spotify" ? (
         <>
           <circle cx="6" cy="6" r="5.5" fill="currentColor" />
           <g fill="none" stroke="var(--background)" strokeLinecap="round">
@@ -38,7 +45,7 @@ export function SourceMark({ provider, className }: { provider: ProviderId; clas
 }
 
 /** One mark per distinct provider. */
-export function SourceMarks({ providers }: { providers: ProviderId[] }) {
+export function SourceMarks({ providers }: { providers: SourceKind[] }) {
   const unique = [...new Set(providers)];
   return (
     <span className="inline-flex items-center gap-1">
