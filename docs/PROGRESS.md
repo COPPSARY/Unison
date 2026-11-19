@@ -1,5 +1,9 @@
 # Progress
 
+## Order (2026-11-19)
+T-15 → UP-01 … UP-16 (Universal Player addendum) → T-16 → T-20+ (YouTube parked) → T-30 …
+T-40 … T-44 are replaced by UP tasks. New human step H13: Audius API key (for UP-13).
+
 ## In progress
 
 ### T-02 — CI workflow

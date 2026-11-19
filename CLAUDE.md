@@ -57,3 +57,21 @@ The full spec is the "AI Build Spec" doc; sections are referenced as §N.
 - Commit .env.local, keys, tokens or fixture files containing real user data.
 - Add unofficial YouTube Music APIs, audio download or ad-blocking.
 - Add features not marked "In" in §2; put ideas in docs/IDEAS.md.
+
+## Universal player (see docs/Unison-Universal-Player.pdf, §UP)
+- Work order: UP-01..UP-16 after T-15, then T-16. T-40..T-44 are replaced by UP tasks.
+- Rust owns the queue, resolver and all engines' state. The UI never decides which source plays.
+- Engines: NativeEngine (local files + Audius HTTP streams, symphonia + rodio/cpal),
+  YouTubeEngine (official IFrame player only), SpotifyConnectEngine (remote control only).
+- Never download, cache or extract audio from Spotify or YouTube. Never hide the YouTube player
+  below 200x200 px. Spotify playback requires Premium + an active device; otherwise fall back.
+- Fallback may only switch between sources merged into the same tracks row. Never play a
+  different song as a substitute. Audius merges only on ISRC or strict match (0.95/0.95/±2s).
+- Local files are referenced in place by default; fingerprint = size + BLAKE3(first 1MB + last 64KB).
+  Never modify the user's audio files or tags.
+- Imports and folder scans run in background tasks with progress events; never block a command
+  for more than 200ms.
+- Audius API key lives in the keychain (audius.api_key). Credit the artist wherever an Audius track shows.
+- Every fallback writes a playback_log row with ended_reason = 'fallback' and emits player://fallback.
+- Numbering in this repo: the addendum's migration '0002_universal_player.sql' is
+  '0003_universal_player.sql' (0002 already applied) and its 'ADR 0002' is docs/decisions/0004.

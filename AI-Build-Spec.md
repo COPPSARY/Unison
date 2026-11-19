@@ -40,6 +40,7 @@ An AI agent cannot create accounts, accept terms or pay. Do these before the tas
 | H9 | Updater signing key | Run `pnpm tauri signer generate` locally; keep private key + password safe | `TAURI_SIGNING_PRIVATE_KEY`, password secrets; public key goes in config | T-61 |
 | H10 | Windows code signing | Get a code-signing option (e.g. a cloud signing service or an OV certificate) so SmartScreen doesn't block the installer | Signing credentials as CI secrets | T-62 |
 | H11 | Google OAuth verification | After beta: submit app for verification with homepage, privacy policy, demo video of each scope's use | Public Google login (no 100-user cap) | Public launch |
+| H13 | Audius API key | api.audius.co/plans → free key; put it in `.env.local` as `AUDIUS_API_KEY` for development (users can paste their own in Settings) | `AUDIUS_API_KEY` | UP-13 |
 | H12 | Testers | Recruit beta testers with Spotify Premium (needed for their own dev app) and a Google account | Tester list | T-63 |
 
 ## 2. Product scope (v1.0, Windows)
@@ -521,6 +522,8 @@ Do tasks in order. "Needs" lists tasks that must be done first and human steps (
 | T-33 | Remote search sections (Spotify on debounce, YouTube on Enter only) | T-32 | Quota cost logged; YouTube never searched per keystroke |
 
 ### Phase 4 — Playback
+
+> **Replaced** by the Universal Player addendum (`docs/Unison-Universal-Player.pdf`): build UP-01 … UP-16 after T-15, then continue with T-16. T-40 … T-44 below are kept for reference only; T-45 (lyrics) stays.
 
 | ID | Task | Needs | Done when |
 | --- | --- | --- | --- |
