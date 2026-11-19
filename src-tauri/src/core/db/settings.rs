@@ -68,7 +68,7 @@ pub async fn save(pool: &SqlitePool, settings: Settings) -> AppResult<Settings> 
 mod tests {
     use super::*;
     use crate::core::db;
-    use crate::model::{ProviderId, Theme, WindowMaterial};
+    use crate::model::{ProviderId, ReplayGainMode, SourceKind, SpotifyMode, Theme, WindowMaterial};
 
     async fn pool() -> (tempfile::TempDir, SqlitePool) {
         let dir = tempfile::tempdir().unwrap();
@@ -92,10 +92,34 @@ mod tests {
             sidebar_collapsed: vec!["library".into()],
             sync_interval_min: 60,
             preferred_source: Some(ProviderId::Youtube),
+            ..Settings::default()
         };
         let saved = save(&pool, wanted.clone()).await.unwrap();
         assert_eq!(saved, wanted);
         assert_eq!(load(&pool).await.unwrap(), wanted);
+    }
+
+    #[tokio::test]
+    async fn player_local_audius_sections_round_trip_under_their_keys() {
+        let (_d, pool) = pool().await;
+        let mut wanted = Settings::default();
+        wanted.player.source_priority = vec![SourceKind::Youtube, SourceKind::Local, SourceKind::Spotify, SourceKind::Audius];
+        wanted.player.spotify_mode = SpotifyMode::Never;
+        wanted.player.replaygain = ReplayGainMode::Album;
+        wanted.player.crossfade_ms = 4_000;
+        wanted.local.watched_folders = vec![r"C:\Users\me\Music".into()];
+        wanted.audius.show_trending_row = true;
+        save(&pool, wanted.clone()).await.unwrap();
+        assert_eq!(load(&pool).await.unwrap(), wanted);
+
+        let keys: Vec<String> = sqlx::query_scalar("SELECT key FROM settings ORDER BY key").fetch_all(&pool).await.unwrap();
+        for k in ["audius", "local", "player"] {
+            assert!(keys.iter().any(|x| x == k), "missing key {k}: {keys:?}");
+        }
+        // An older DB without these keys still loads, with defaults.
+        sqlx::query("DELETE FROM settings WHERE key IN ('player', 'local', 'audius')").execute(&pool).await.unwrap();
+        let s = load(&pool).await.unwrap();
+        assert_eq!(s.player, crate::model::PlayerSettings::default());
     }
 
     #[tokio::test]

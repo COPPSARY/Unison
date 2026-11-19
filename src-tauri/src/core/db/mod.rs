@@ -70,7 +70,15 @@ mod tests {
         assert!(dir.path().join("nested").join(DB_FILE).exists());
         let latest = MIGRATOR.iter().map(|m| m.version).max().unwrap();
         assert_eq!(schema_version(&pool).await.unwrap(), latest);
-        assert!(latest >= 2);
+        assert!(latest >= 3);
+        // Universal Player columns (0003).
+        let cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('track_sources')")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        for c in ["unavailable_reason", "quality", "replaygain_track", "replaygain_album"] {
+            assert!(cols.iter().any(|x| x == c), "missing column {c}");
+        }
 
         let tables: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM sqlite_master WHERE type IN ('table') AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -81,7 +89,7 @@ mod tests {
         for expected in [
             "accounts", "albums", "artists", "cache_kv", "library", "playlist_items", "playlists",
             "quota_usage", "settings", "signals", "sync_state", "track_sources", "tracks",
-            "tracks_fts",
+            "tracks_fts", "local_files", "watched_folders", "playback_log",
         ] {
             assert!(tables.iter().any(|t| t == expected), "missing table {expected}: {tables:?}");
         }

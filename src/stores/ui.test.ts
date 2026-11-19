@@ -20,6 +20,20 @@ const saved: Settings = {
   sidebarCollapsed: ["library"],
   syncIntervalMin: 60,
   preferredSource: "youtube",
+  player: {
+    sourcePriority: ["youtube", "local", "spotify", "audius"],
+    autoFallback: true,
+    fallbackOnErrorMidtrack: true,
+    spotifyMode: "never",
+    youtubeRelayUrl: null,
+    outputDevice: null,
+    gapless: true,
+    crossfadeMs: 3000,
+    replaygain: "album",
+    volume: 55,
+  },
+  local: { watchedFolders: ["C:/Music"], copyOnDrop: false, copyTarget: null, extensions: ["mp3", "flac"] },
+  audius: { enabled: true, useAsFallback: true, showInSearch: true, showTrendingRow: false },
 };
 
 beforeEach(() => {
@@ -51,6 +65,7 @@ describe("ui store", () => {
     expect(settingsSet).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(400);
     expect(settingsSet).toHaveBeenCalledOnce();
+    // Player / local / audius sections are carried through untouched.
     expect(settingsSet).toHaveBeenCalledWith({
       ...saved,
       theme: "dark",

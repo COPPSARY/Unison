@@ -3,6 +3,10 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+pub use crate::model_player::{
+    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, SpotifyMode,
+};
+
 /// Build and schema information shown in Settings → About.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -245,8 +249,14 @@ pub struct Settings {
     pub sidebar_collapsed: Vec<String>,
     /// Background sync interval in minutes: 15, 30 or 60.
     pub sync_interval_min: u32,
-    /// Source to play when a song exists on both platforms; `None` = Spotify if connected.
+    /// Legacy single preference (superseded by `player.source_priority`, kept for old data).
     pub preferred_source: Option<ProviderId>,
+    /// Universal Player (addendum §5): stored under the key `player`.
+    pub player: PlayerSettings,
+    /// Local files: stored under the key `local`.
+    pub local: LocalSettings,
+    /// Audius: stored under the key `audius`.
+    pub audius: AudiusSettings,
 }
 
 impl Default for Settings {
@@ -258,6 +268,9 @@ impl Default for Settings {
             sidebar_collapsed: Vec::new(),
             sync_interval_min: 30,
             preferred_source: None,
+            player: PlayerSettings::default(),
+            local: LocalSettings::default(),
+            audius: AudiusSettings::default(),
         }
     }
 }
@@ -275,6 +288,8 @@ impl Settings {
         self.sidebar_collapsed.sort();
         self.sidebar_collapsed.dedup();
         self.sidebar_collapsed.truncate(16);
+        self.player = self.player.sanitized();
+        self.local = self.local.sanitized();
         self
     }
 }

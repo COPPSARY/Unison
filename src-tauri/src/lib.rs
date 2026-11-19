@@ -5,6 +5,7 @@ mod commands;
 pub mod core;
 pub mod error;
 pub mod model;
+pub mod model_player;
 pub mod providers;
 mod state;
 

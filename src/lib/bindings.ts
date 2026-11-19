@@ -134,6 +134,24 @@ export type Artist_Serialize = {
 	artwork: string | null,
 };
 
+export type AudiusSettings = AudiusSettings_Serialize | AudiusSettings_Deserialize;
+
+export type AudiusSettings_Deserialize = {
+	/**  Effective only once an API key is saved (keychain `audius.api_key`). */
+	enabled?: boolean,
+	useAsFallback?: boolean,
+	showInSearch?: boolean,
+	showTrendingRow?: boolean,
+};
+
+export type AudiusSettings_Serialize = {
+	/**  Effective only once an API key is saved (keychain `audius.api_key`). */
+	enabled: boolean,
+	useAsFallback: boolean,
+	showInSearch: boolean,
+	showTrendingRow: boolean,
+};
+
 /**  Machine-readable error kind, serialised as `{ "type": "rateLimited", "retryAfter": 30 }`. */
 export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type: "authTimeout" } | { type: "needsReconnect" } | { type: "invalidClientId" } | { type: "redirectUriMismatch" } | { type: "spotifyPremiumRequired" } | 
 /**  Spotify Development Mode: the signed-in user is not listed under User Management. */
@@ -150,6 +168,64 @@ export type LibrarySort = "dateAdded" | "title" | "artist";
 export type ListStats = {
 	count: number,
 	durationMs: number | null,
+};
+
+export type LocalSettings = LocalSettings_Serialize | LocalSettings_Deserialize;
+
+export type LocalSettings_Deserialize = {
+	watchedFolders?: string[],
+	/**  Copy dropped files into `copy_target` instead of referencing them in place. */
+	copyOnDrop?: boolean,
+	/**  `None` = %USERPROFILE%/Music/Unison. */
+	copyTarget?: string | null,
+	/**  Lowercase, without dots. */
+	extensions?: string[],
+};
+
+export type LocalSettings_Serialize = {
+	watchedFolders: string[],
+	/**  Copy dropped files into `copy_target` instead of referencing them in place. */
+	copyOnDrop: boolean,
+	/**  `None` = %USERPROFILE%/Music/Unison. */
+	copyTarget: string | null,
+	/**  Lowercase, without dots. */
+	extensions: string[],
+};
+
+export type PlayerSettings = PlayerSettings_Serialize | PlayerSettings_Deserialize;
+
+export type PlayerSettings_Deserialize = {
+	sourcePriority?: SourceKind[],
+	autoFallback?: boolean,
+	fallbackOnErrorMidtrack?: boolean,
+	spotifyMode?: SpotifyMode,
+	/**  Hosted YouTube player page; `None` = direct embed. */
+	youtubeRelayUrl?: string | null,
+	/**  NativeEngine output device; `None` = system default. */
+	outputDevice?: string | null,
+	gapless?: boolean,
+	/**  0–12,000 ms (NativeEngine). */
+	crossfadeMs?: number,
+	replaygain?: ReplayGainMode,
+	/**  0–100, remembered. */
+	volume?: number,
+};
+
+export type PlayerSettings_Serialize = {
+	sourcePriority: SourceKind[],
+	autoFallback: boolean,
+	fallbackOnErrorMidtrack: boolean,
+	spotifyMode: SpotifyMode,
+	/**  Hosted YouTube player page; `None` = direct embed. */
+	youtubeRelayUrl: string | null,
+	/**  NativeEngine output device; `None` = system default. */
+	outputDevice: string | null,
+	gapless: boolean,
+	/**  0–12,000 ms (NativeEngine). */
+	crossfadeMs: number,
+	replaygain: ReplayGainMode,
+	/**  0–100, remembered. */
+	volume: number,
 };
 
 export type Playlist = Playlist_Serialize | Playlist_Deserialize;
@@ -210,6 +286,9 @@ export type Playlist_Serialize = {
 /**  A music platform. Stored in SQLite as `'spotify'` / `'youtube'`. */
 export type ProviderId = "spotify" | "youtube";
 
+/**  Volume leveling (NativeEngine). */
+export type ReplayGainMode = "off" | "track" | "album";
+
 /**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
 export type Settings = Settings_Serialize | Settings_Deserialize;
 
@@ -223,8 +302,14 @@ export type Settings_Deserialize = {
 	sidebarCollapsed?: string[],
 	/**  Background sync interval in minutes: 15, 30 or 60. */
 	syncIntervalMin?: number,
-	/**  Source to play when a song exists on both platforms; `None` = Spotify if connected. */
+	/**  Legacy single preference (superseded by `player.source_priority`, kept for old data). */
 	preferredSource?: ProviderId | null,
+	/**  Universal Player (addendum §5): stored under the key `player`. */
+	player?: PlayerSettings_Deserialize,
+	/**  Local files: stored under the key `local`. */
+	local?: LocalSettings_Deserialize,
+	/**  Audius: stored under the key `audius`. */
+	audius?: AudiusSettings_Deserialize,
 };
 
 /**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
@@ -237,8 +322,14 @@ export type Settings_Serialize = {
 	sidebarCollapsed: string[],
 	/**  Background sync interval in minutes: 15, 30 or 60. */
 	syncIntervalMin: number,
-	/**  Source to play when a song exists on both platforms; `None` = Spotify if connected. */
+	/**  Legacy single preference (superseded by `player.source_priority`, kept for old data). */
 	preferredSource: ProviderId | null,
+	/**  Universal Player (addendum §5): stored under the key `player`. */
+	player: PlayerSettings_Serialize,
+	/**  Local files: stored under the key `local`. */
+	local: LocalSettings_Serialize,
+	/**  Audius: stored under the key `audius`. */
+	audius: AudiusSettings_Serialize,
 };
 
 export type Signal = {
@@ -258,6 +349,9 @@ export type SignalSubject =
 /**  Artist name. */
 ({ artist: string }) & { track?: never };
 
+/**  Where a track can be played from. */
+export type SourceKind = "local" | "spotify" | "youtube" | "audius";
+
 /**  Where a unified track can be played. */
 export type SourceRef = {
 	provider: ProviderId,
@@ -265,6 +359,15 @@ export type SourceRef = {
 	itemId: string,
 	url: string,
 };
+
+/**  How Spotify is used for playback. */
+export type SpotifyMode = 
+/**  Use Spotify when Premium + a device are available, otherwise fall back. */
+"auto" | 
+/**  Ask every time before playing on Spotify. */
+"alwaysAsk" | 
+/**  Never use Spotify for playback. */
+"never";
 
 export type SyncFinished = SyncFinished_Serialize | SyncFinished_Deserialize;
 

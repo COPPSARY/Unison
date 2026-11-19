@@ -34,6 +34,14 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-01 — Universal Player migration + settings** (2026-11-19): migration
+  `0003_universal_player.sql` (track_sources reason/quality/ReplayGain, local_files,
+  watched_folders, playback_log); `SourceKind`, `SpotifyMode`, `ReplayGainMode`,
+  `PlayerSettings` / `LocalSettings` / `AudiusSettings` with addendum defaults under settings keys
+  `player` / `local` / `audius`; sanitising (priority deduped + completed, crossfade/volume
+  clamps, https-only relay URL, extensions normalised); UI carries the sections through when it
+  saves. Applied to the owner's DB by the running dev app.
+
 - **T-15 — Playlist detail** (2026-11-19): `playlist_get` / `playlist_tracks` /
   `playlist_open_external`; owned/collaborative Spotify playlists load items on first open
   (Feb 2026 `item` shape, legacy `track` accepted; episodes and null items skipped; local files
