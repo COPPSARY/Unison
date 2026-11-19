@@ -250,7 +250,14 @@
     "upstream": "The service had a problem ({status}). Try again in a moment.",
     "internal": "Something went wrong. Try again; if it keeps happening, restart Unison.",
     "unknown": "Something went wrong. Try again.",
-    "userNotRegistered": "This Spotify account isn't added to your developer app. Add its email under User Management in the Spotify dashboard, then connect again."
+    "userNotRegistered": "This Spotify account isn't added to your developer app. Add its email under User Management in the Spotify dashboard, then connect again.",
+    "noPlayableSource": "This song can't play from any connected source here. Open it in its app instead.",
+    "fileMissing": "The file was moved or deleted. Use Locate file to find it.",
+    "unsupportedFormat": "Unison can't play this file type.",
+    "drmProtected": "This file is copy-protected (DRM) and can't be played.",
+    "audiusUnavailable": "Audius isn't reachable right now. Try again in a moment.",
+    "youtubeEmbedBlocked": "YouTube won't let this video play outside YouTube (error {code}).",
+    "outputDeviceUnavailable": "That audio output isn't available. Pick another one in Settings."
   },
   "settings": {
     "about": "About",

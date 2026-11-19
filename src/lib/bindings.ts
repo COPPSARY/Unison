@@ -159,7 +159,7 @@ export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type
 /**  Seconds until the next request is allowed. */
 retryAfter: number } | { type: "youtubeQuotaExceeded"; 
 /**  Unix seconds when the daily quota resets (midnight Pacific). */
-resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "internal" };
+resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "noPlayableSource" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "drmProtected" } | { type: "audiusUnavailable" } | { type: "youtubeEmbedBlocked"; code: number } | { type: "outputDeviceUnavailable" } | { type: "internal" };
 
 /**  Sort orders for list and grid views. */
 export type LibrarySort = "dateAdded" | "title" | "artist";
@@ -190,6 +190,15 @@ export type LocalSettings_Serialize = {
 	copyTarget: string | null,
 	/**  Lowercase, without dots. */
 	extensions: string[],
+};
+
+/**  One concrete way to play a track: which engine and which item. */
+export type PlaySource = {
+	kind: SourceKind,
+	/**  Spotify track id, YouTube video id, Audius track id or local fingerprint. */
+	itemId: string,
+	/**  Spotify/YouTube/Audius URL or absolute file path. */
+	url: string,
 };
 
 export type PlayerSettings = PlayerSettings_Serialize | PlayerSettings_Deserialize;
@@ -227,6 +236,37 @@ export type PlayerSettings_Serialize = {
 	/**  0–100, remembered. */
 	volume: number,
 };
+
+/**  What the UI sees (sent as `player://state` from UP-09 on). */
+export type PlayerSnapshot = PlayerSnapshot_Serialize | PlayerSnapshot_Deserialize;
+
+/**  What the UI sees (sent as `player://state` from UP-09 on). */
+export type PlayerSnapshot_Deserialize = {
+	status: PlayerStatus,
+	trackId?: string | null,
+	/**  Source actually playing. */
+	source?: PlaySource | null,
+	volume: number,
+	repeat: RepeatMode,
+	shuffle: boolean,
+	queueLength: number,
+};
+
+/**  What the UI sees (sent as `player://state` from UP-09 on). */
+export type PlayerSnapshot_Serialize = {
+	status: PlayerStatus,
+	trackId: string | null,
+	/**  Source actually playing. */
+	source: PlaySource | null,
+	volume: number,
+	repeat: RepeatMode,
+	shuffle: boolean,
+	queueLength: number,
+};
+
+export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | 
+/**  The current track had no playable source. */
+"error";
 
 export type Playlist = Playlist_Serialize | Playlist_Deserialize;
 
@@ -285,6 +325,8 @@ export type Playlist_Serialize = {
 
 /**  A music platform. Stored in SQLite as `'spotify'` / `'youtube'`. */
 export type ProviderId = "spotify" | "youtube";
+
+export type RepeatMode = "off" | "all" | "one";
 
 /**  Volume leveling (NativeEngine). */
 export type ReplayGainMode = "off" | "track" | "album";
@@ -358,6 +400,25 @@ export type SourceRef = {
 	/**  Spotify track id or YouTube video id. */
 	itemId: string,
 	url: string,
+};
+
+/**  What `player_sources` returns per source kind. */
+export type SourceStatus = SourceStatus_Serialize | SourceStatus_Deserialize;
+
+/**  What `player_sources` returns per source kind. */
+export type SourceStatus_Deserialize = {
+	kind: SourceKind,
+	source?: PlaySource | null,
+	canPlay: boolean,
+	reason?: UnavailableReason | null,
+};
+
+/**  What `player_sources` returns per source kind. */
+export type SourceStatus_Serialize = {
+	kind: SourceKind,
+	source: PlaySource | null,
+	canPlay: boolean,
+	reason: UnavailableReason | null,
 };
 
 /**  How Spotify is used for playback. */
@@ -468,6 +529,13 @@ export type Track_Serialize = {
 	/**  When it was liked/added (library and playlist views), Unix seconds. */
 	addedAt: number | null,
 };
+
+/**  Why a source can't play right now (shown in "Play from…" and Settings → Playback). */
+export type UnavailableReason = { type: "notConnected" } | { type: "premiumRequired" } | { type: "noDevice" } | { type: "notEmbeddable" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "gated" } | 
+/**  Turned off in Settings (e.g. Spotify mode "Never"). */
+{ type: "disabled" } | { type: "offline" } | 
+/**  The track has no source of this kind. */
+{ type: "noSource" };
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
 export type WindowMaterial = "mica" | "acrylic" | "off";

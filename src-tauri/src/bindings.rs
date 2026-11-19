@@ -5,6 +5,8 @@ use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::commands;
+use crate::core::playback::engine::SourceStatus;
+use crate::core::playback::player::PlayerSnapshot;
 use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
 use crate::model::{Account, Playlist, Signal, Track};
@@ -44,6 +46,8 @@ pub fn builder() -> Builder<tauri::Wry> {
         .typ::<Track>()
         .typ::<Playlist>()
         .typ::<Signal>()
+        .typ::<SourceStatus>()
+        .typ::<PlayerSnapshot>()
         // Unix-second timestamps fit comfortably in a JS number.
         .dangerously_cast_bigints_to_number()
 }

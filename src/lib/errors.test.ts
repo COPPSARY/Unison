@@ -15,6 +15,7 @@ describe("errors", () => {
   it("fills data-carrying codes", () => {
     expect(messageForCode({ type: "rateLimited", retryAfter: 30 })).toContain("30 s");
     expect(messageForCode({ type: "upstream", status: 503 })).toContain("503");
+    expect(messageForCode({ type: "youtubeEmbedBlocked", code: 153 })).toContain("153");
     expect(messageForCode({ type: "youtubeQuotaExceeded", resetsAt: 0 })).not.toContain("{time}");
   });
 
@@ -34,6 +35,14 @@ describe("errors", () => {
       { type: "notFound" },
       { type: "upstream", status: 500 },
       { type: "internal" },
+      { type: "userNotRegistered" },
+      { type: "noPlayableSource" },
+      { type: "fileMissing" },
+      { type: "unsupportedFormat" },
+      { type: "drmProtected" },
+      { type: "audiusUnavailable" },
+      { type: "youtubeEmbedBlocked", code: 153 },
+      { type: "outputDeviceUnavailable" },
     ];
     for (const code of codes) expect(messageForCode(code).length).toBeGreaterThan(10);
   });

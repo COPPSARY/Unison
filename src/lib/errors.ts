@@ -27,6 +27,8 @@ export function messageForCode(code: ErrorCode): string {
       return format(e.youtubeQuotaExceeded, { time: timeFormat.format(code.resetsAt * 1000) });
     case "upstream":
       return format(e.upstream, { status: code.status });
+    case "youtubeEmbedBlocked":
+      return format(e.youtubeEmbedBlocked, { code: code.code });
     default:
       return e[code.type];
   }

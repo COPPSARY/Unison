@@ -34,6 +34,16 @@ pub enum ErrorCode {
     Upstream {
         status: u16,
     },
+    // Universal Player (addendum §6).
+    NoPlayableSource,
+    FileMissing,
+    UnsupportedFormat,
+    DrmProtected,
+    AudiusUnavailable,
+    YoutubeEmbedBlocked {
+        code: u16,
+    },
+    OutputDeviceUnavailable,
     Internal,
 }
 

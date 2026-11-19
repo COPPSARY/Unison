@@ -34,6 +34,14 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-02 — Engines, queue, player state machine** (2026-11-19): `core/playback`: `Engine` and
+  `Candidates` traits, `PlaySource`, `SourceStatus` + `UnavailableReason` and `PlayerSnapshot` in
+  bindings; `Queue` of unified ids (manual vs auto next, shuffle keeping current and one pass per
+  cycle, repeat off/all/one, play-next/append); `Player` picks the first engine that can play,
+  pauses the previous engine on switch, one volume for all, restart-on-prev after 3 s,
+  auto-advance, NoPlayableSource error state. New error codes from addendum §6 with messages.
+  13 fake-engine/queue tests.
+
 - **UP-01 — Universal Player migration + settings** (2026-11-19): migration
   `0003_universal_player.sql` (track_sources reason/quality/ReplayGain, local_files,
   watched_folders, playback_log); `SourceKind`, `SpotifyMode`, `ReplayGainMode`,
