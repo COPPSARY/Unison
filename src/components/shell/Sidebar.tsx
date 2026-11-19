@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Disc3,
   Heart,
   House,
@@ -9,7 +10,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { Icon, Tooltip } from "@/components/ui";
 import { strings } from "@/i18n";
@@ -29,6 +30,7 @@ const LIBRARY: NavItem[] = [
   { to: "/library/artists", label: strings.nav.artists, icon: MicVocal },
 ];
 
+/** Finder-style row: accent-tinted icon, primary label, grey rounded fill when selected. */
 function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const link = (
     <NavLink
@@ -37,26 +39,14 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
       {...(collapsed ? { "aria-label": item.label } : {})}
       className={({ isActive }) =>
         cn(
-          "u-tone relative flex h-8 items-center gap-2.5 rounded-control text-body",
-          collapsed ? "w-10 justify-center" : "px-2.5",
-          isActive
-            ? "bg-fill-tertiary font-medium text-text"
-            : "text-text-muted hover:bg-fill-quaternary hover:text-text",
+          "u-tone flex h-7 items-center gap-2 rounded-[8px] text-body text-text",
+          collapsed ? "w-10 justify-center" : "px-2",
+          isActive ? "bg-fill-secondary" : "hover:bg-fill-quaternary",
         )
       }
     >
-      {({ isActive }) => (
-        <>
-          {isActive ? (
-            <span
-              aria-hidden="true"
-              className="absolute top-2 bottom-2 left-0 w-0.5 rounded-full bg-accent"
-            />
-          ) : null}
-          <Icon as={item.icon} size={16} />
-          {collapsed ? null : <span className="truncate">{item.label}</span>}
-        </>
-      )}
+      <Icon as={item.icon} size={16} className="shrink-0 text-accent" />
+      {collapsed ? null : <span className="truncate">{item.label}</span>}
     </NavLink>
   );
   return collapsed ? (
@@ -68,28 +58,64 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
   );
 }
 
-function Group({
+/** Section with a bold muted header; hovering the header reveals a collapse chevron. */
+function Section({
   label,
   collapsed,
   children,
+  grow = false,
 }: {
   label: string;
   collapsed: boolean;
   children: ReactNode;
+  grow?: boolean;
 }) {
+  const [open, setOpen] = useState(true);
+  const bodyId = useId();
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <div aria-hidden="true" className="my-2 h-px w-6 bg-border" />
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-0.5">
-      {collapsed ? (
-        <div aria-hidden="true" className="mx-auto my-2 h-px w-6 bg-border" />
-      ) : (
-        <h2 className="px-2.5 pt-3 pb-1 text-footnote font-semibold text-text-tertiary">{label}</h2>
-      )}
-      {children}
+    <div className={cn("flex flex-col", grow && open && "min-h-0 flex-1")}>
+      <h2 className="mt-3">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={() => setOpen((o) => !o)}
+          className="group u-tone flex h-6 w-full items-center justify-between rounded-[6px] px-2 text-left text-footnote font-bold text-text-tertiary"
+        >
+          {label}
+          <Icon
+            as={ChevronDown}
+            size={12}
+            className={cn(
+              "opacity-0 transition-[opacity,transform] duration-(--spring-smooth-duration) ease-(--spring-smooth)",
+              "group-hover:opacity-100 group-focus-visible:opacity-100",
+              !open && "-rotate-90",
+            )}
+          />
+        </button>
+      </h2>
+      <div
+        id={bodyId}
+        hidden={!open}
+        className={cn("flex flex-col gap-px", grow && "min-h-0 flex-1 overflow-y-auto")}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
-/** Floating glass sidebar (240 px, 64 px collapsed). */
+/** Floating glass sidebar, Finder-style (240 px, 64 px collapsed). */
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const devItems: NavItem[] = import.meta.env.DEV
     ? [{ to: "/dev/ui", label: strings.nav.uiKit, icon: Palette }]
@@ -103,45 +129,31 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         collapsed ? "w-16 items-center" : "w-60",
       )}
     >
-      {/* Top strip doubles as a drag region, like a title bar. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center px-4">
-        {collapsed ? null : (
-          <span data-tauri-drag-region className="text-title3 text-text">
-            {strings.app.name}
-          </span>
-        )}
-      </div>
+      {/* Empty top strip: drag region aligned with the title bar (where macOS has its lights). */}
+      <div data-tauri-drag-region className="h-8 w-full shrink-0" />
 
-      <div className={cn("flex flex-col gap-1", collapsed ? "items-center" : "px-2")}>
-        <Group label={strings.nav.listen} collapsed={collapsed}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", collapsed ? "items-center" : "px-2")}>
+        <Section label={strings.nav.listen} collapsed={collapsed}>
           {LISTEN.map((item) => (
             <SidebarLink key={item.to} item={item} collapsed={collapsed} />
           ))}
-        </Group>
-        <Group label={strings.nav.library} collapsed={collapsed}>
+        </Section>
+        <Section label={strings.nav.library} collapsed={collapsed}>
           {LIBRARY.map((item) => (
             <SidebarLink key={item.to} item={item} collapsed={collapsed} />
           ))}
-        </Group>
+        </Section>
+        {collapsed ? null : (
+          <Section label={strings.nav.yourPlaylists} collapsed={collapsed} grow>
+            <p className="px-2 py-1 text-callout text-text-tertiary">{strings.nav.noPlaylists}</p>
+          </Section>
+        )}
       </div>
-
-      {collapsed ? (
-        <div className="flex-1" />
-      ) : (
-        <div className="mt-1 flex min-h-0 flex-1 flex-col px-2">
-          <h2 className="px-2.5 pt-3 pb-1 text-footnote font-semibold text-text-tertiary">
-            {strings.nav.yourPlaylists}
-          </h2>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <p className="px-2.5 py-1 text-callout text-text-tertiary">{strings.nav.noPlaylists}</p>
-          </div>
-        </div>
-      )}
 
       <div
         className={cn(
-          "flex flex-col gap-0.5 border-t border-border py-2",
-          collapsed ? "w-full items-center" : "px-2",
+          "flex w-full flex-col gap-px border-t border-border py-2",
+          collapsed ? "items-center" : "px-2",
         )}
       >
         {devItems.map((item) => (
@@ -152,7 +164,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           collapsed={collapsed}
         />
         {collapsed ? null : (
-          <p className="flex items-center gap-2 px-2.5 pt-1 text-footnote text-text-tertiary">
+          <p className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-tertiary">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-text-tertiary" />
             {strings.account.notConnected}
           </p>

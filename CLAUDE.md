@@ -36,6 +36,7 @@ The full spec is the "AI Build Spec" doc; sections are referenced as §N.
 - Shapes: capsule buttons/segmented/search; concentric radii; cards 12px, floating panels 16-20px.
 - Icons: lucide-react, 1.5px stroke, label colours. Never bright-coloured icons,
   never icons on tinted circles/squares (accent-filled play capsule is the exception).
+  Sidebar nav icons are accent-tinted, Finder-style; selection there is a grey fill, no bar.
 - Hover = tone change only. Press = scale 0.97 with the snappy spring. No lift/shadow on hover.
 - Gradients only for: artwork ambient backdrop, glass rims, scrims, skeleton shimmer.
 - Motion: springs from src/lib/spring.ts (smooth by default, snappy for press/popovers), opacity

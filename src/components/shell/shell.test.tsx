@@ -108,6 +108,27 @@ describe("shortcuts", () => {
   });
 });
 
+describe("sidebar sections", () => {
+  it("collapse and expand from their header (Finder-style)", async () => {
+    renderRoute("/");
+    await heading(strings.pages.home.title);
+    const header = screen.getByRole("button", { name: strings.nav.library });
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: strings.nav.albums })).not.toBeInTheDocument();
+    await userEvent.click(header);
+    expect(screen.getByRole("link", { name: strings.nav.albums })).toBeInTheDocument();
+  });
+
+  it("tints item icons with the accent and marks selection with a fill, not a bar", async () => {
+    renderRoute("/library/liked");
+    const link = await screen.findByRole("link", { name: strings.nav.liked });
+    expect(link.querySelector("svg")?.getAttribute("class")).toContain("text-accent");
+    expect(link.className).toContain("bg-fill-secondary");
+  });
+});
+
 describe("sidebar collapse", () => {
   it("shows icons with accessible names and hides group labels below 1100 px", async () => {
     media.matches = true;

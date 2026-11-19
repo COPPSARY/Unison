@@ -43,3 +43,9 @@ accent, layouts, icons) must not be copied.
 - Glass costs GPU time: it is limited to the chrome layer; performance budgets (§10) still apply.
 - LRCLIB lyrics are community-sourced; lyric licensing must be reviewed before public launch
   (added to §12 checklist).
+
+## Addendum (2026-11-19) — Finder-style sidebar
+Owner request: the sidebar follows macOS Finder. Section headers are bold, muted and collapsible
+(chevron on hover); rows are 28 px with accent-tinted icons and primary-colour labels; the
+selected row is a grey rounded fill instead of the 2 px accent bar; no wordmark at the top (empty
+drag strip). Accent-tinted icons are allowed only in the sidebar.

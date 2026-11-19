@@ -81,7 +81,7 @@ Direction: Apple-inspired glass, dark-first (see `docs/decisions/0002-apple-insp
 
 - **Window:** custom title bar (Tauri `decorations: false`) 40 px high, drag region, Windows min/max/close on the right. Minimum window 960 × 600.
 - **Sidebar:** 240 px, collapses to 64 px below 1100 px width. Groups: *Listen* (Home, Search) · *Library* (Liked songs, Albums, Playlists, Artists) · *Your playlists* (scrollable list, both sources mixed, small monochrome source mark). Settings and account status pinned at the bottom.
-- **Active item:** label and icon in `text`, 2 px accent bar on the left edge; inactive in `text-muted`. No coloured icons.
+- **Style:** Finder-like (ADR 0002 addendum). Bold muted section headers that collapse from a hover chevron; 28 px rows; icons tinted with the accent; labels in `text`. **Active item:** grey rounded fill (`fill-secondary`), no bar.
 - **Player bar:** 72 px, fixed bottom, full width. Left: 48 px cover, title, artist, source mark, like toggle. Centre: previous, play/pause (the only accent-filled control), next, shuffle, repeat; seek bar with tabular time on both sides. Right: queue, device picker (Spotify), volume, expand.
 - **Content area:** page padding 32 px; list pages use full width; Settings capped at 720 px.
 
