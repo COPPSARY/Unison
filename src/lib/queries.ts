@@ -73,3 +73,12 @@ export function useConnectSpotify() {
     },
   });
 }
+
+/** Starts a background sync (all connected providers when `provider` is null). */
+export function useSyncNow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: ProviderId | null) => commands.syncNow(provider),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+  });
+}

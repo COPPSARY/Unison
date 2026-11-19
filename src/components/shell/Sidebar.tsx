@@ -16,6 +16,7 @@ import { Icon, Tooltip } from "@/components/ui";
 import { format, strings } from "@/i18n";
 import { cn } from "@/lib/cn";
 import { useAccounts } from "@/lib/queries";
+import { useSyncStore } from "@/stores/sync";
 import { useUiStore, type SidebarSection } from "@/stores/ui";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
@@ -121,9 +122,19 @@ function Section({
 }
 
 /** Floating glass sidebar, Finder-style (240 px, 64 px collapsed). */
+function syncLine(st: { stage: keyof typeof strings.sync.stage; done: number; total: number | null } | undefined) {
+  if (!st) return "";
+  const stage = strings.sync.stage[st.stage];
+  if (st.total === null || st.done === 0) return stage;
+  return format(strings.sync.progress, { stage, done: count.format(st.done), total: count.format(st.total) });
+}
+
 /** Footer line: connected accounts, or a muted "No account connected". */
+const count = new Intl.NumberFormat();
+
 function AccountStatusLine() {
   const accounts = useAccounts();
+  const running = useSyncStore((st) => st.running);
   const connected = (accounts.data ?? []).filter((a) => a.status !== "notConnected");
   if (connected.length === 0) {
     return (
@@ -139,13 +150,18 @@ function AccountStatusLine() {
         <p key={a.provider} className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-muted">
           <span
             aria-hidden="true"
-            className={cn("size-1.5 shrink-0 rounded-full", a.status === "needsReconnect" ? "bg-warning" : "bg-success")}
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              a.status === "needsReconnect" ? "bg-warning" : running[a.provider] ? "bg-accent" : "bg-success",
+            )}
           />
-          <span className="truncate">
-            {format(strings.account.connectedTo, {
-              provider: strings.source[a.provider],
-              name: a.displayName ?? "",
-            })}
+          <span className="truncate tabular-nums">
+            {running[a.provider]
+              ? syncLine(running[a.provider])
+              : format(strings.account.connectedTo, {
+                  provider: strings.source[a.provider],
+                  name: a.displayName ?? "",
+                })}
           </span>
         </p>
       ))}

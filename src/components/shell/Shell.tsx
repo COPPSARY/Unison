@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router";
 import { PlayerBar } from "@/components/player/PlayerBar";
 import { cn } from "@/lib/cn";
+import { useSyncEvents } from "@/lib/events";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
@@ -17,6 +18,7 @@ export function Shell() {
   const scrollRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   useShortcuts();
+  useSyncEvents();
 
   // New page: start at the top.
   useEffect(() => {

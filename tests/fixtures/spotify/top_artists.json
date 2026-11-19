@@ -1,0 +1,10 @@
+{
+  "items": [
+    { "id": "ar_1", "name": "Demo Artist" },
+    { "id": "ar_2", "name": "Khmer Singer" }
+  ],
+  "next": null,
+  "total": 2,
+  "limit": 50,
+  "offset": 0
+}

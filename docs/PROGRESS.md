@@ -13,6 +13,15 @@ Acceptance criteria:
 
 ## Done
 
+- **T-13 — Spotify sync** (2026-11-19): full sync profile → liked → playlists (metadata, Feb 2026
+  `items` shape) → saved albums → followed artists → top/recent signals; per-page transactions;
+  removals only after a complete page set (tracks kept); `sync://progress` / `sync://finished`
+  events; one sync per provider, cancellable; Syncing status; runs after connect, on Sync now,
+  and when older than the interval (failed attempts also wait an interval). Migration 0002 adds
+  `playlists.track_count` / `owner_id`. Spotify pages may contain `null` entries (seen live in
+  /me/albums) — dropped. Tests: 2,050-song sync + re-sync with removals. Live sync with the
+  owner's account succeeded (24 items, then 0/0 on re-sync).
+
 - **T-12 — Spotify client** (2026-11-19): `SpotifyClient` with single-flight token refresh
   (60 s margin + once on 401, rotated tokens persisted, invalid_grant → needs_reconnect),
   429 Retry-After (≤3 retries, >60 s → RateLimited), 5xx backoff 0.5/1/2/4 s, 4-request

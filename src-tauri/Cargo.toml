@@ -3,7 +3,7 @@ name = "unison"
 version = "0.1.0"
 description = "All your music, playing as one."
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.85"
 publish = false
 
 [lib]
@@ -37,6 +37,8 @@ getrandom = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
 url = "2"
+uuid = { version = "1.29", features = ["v7"] }
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

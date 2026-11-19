@@ -3,6 +3,9 @@
 
 pub mod client;
 pub mod connect;
+pub mod map;
+pub mod models;
+pub mod sync;
 
 use serde::Deserialize;
 

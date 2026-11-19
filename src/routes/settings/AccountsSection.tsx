@@ -5,7 +5,9 @@ import { strings } from "@/i18n";
 import type { Account_Serialize as Account, AccountStatus } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
 import { errorMessage } from "@/lib/errors";
-import { useAccounts } from "@/lib/queries";
+import { useAccounts, useSyncNow } from "@/lib/queries";
+import { relativeTime } from "@/lib/time";
+import { format } from "@/i18n";
 import { SpotifyConnectDrawer } from "./SpotifyConnectDrawer";
 
 const a = strings.accounts;
@@ -45,6 +47,14 @@ function ProviderRow({
           {account?.displayName ? (
             <span className="truncate text-callout text-text-tertiary">· {account.displayName}</span>
           ) : null}
+          {account && account.status !== "notConnected" ? (
+            <span className="text-callout text-text-tertiary">
+              ·{" "}
+              {account.lastSyncedAt
+                ? format(strings.sync.lastSynced, { when: relativeTime(account.lastSyncedAt) })
+                : strings.sync.never}
+            </span>
+          ) : null}
         </div>
       </div>
       {action}
@@ -55,6 +65,7 @@ function ProviderRow({
 /** Settings → Accounts (T-11; sync/disconnect controls arrive in T-16). */
 export function AccountsSection() {
   const accounts = useAccounts();
+  const syncNow = useSyncNow();
   const [params, setParams] = useSearchParams();
   const open = params.get("connect") === "spotify";
   const setOpen = (next: boolean) => {
@@ -82,6 +93,17 @@ export function AccountsSection() {
               name={strings.source.spotify}
               account={spotify}
               action={
+                <div className="flex items-center gap-2">
+                {spotifyConnected || spotify?.status === "syncing" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={spotify?.status === "syncing" || syncNow.isPending}
+                    onClick={() => syncNow.mutate("spotify")}
+                  >
+                    {strings.sync.syncNow}
+                  </Button>
+                ) : null}
                 <Drawer open={open} onOpenChange={setOpen}>
                   <Button
                     variant={spotifyConnected ? "secondary" : "primary"}
@@ -94,6 +116,7 @@ export function AccountsSection() {
                   </Button>
                   {open ? <SpotifyConnectDrawer onDone={() => setOpen(false)} /> : null}
                 </Drawer>
+                </div>
               }
             />
             <ProviderRow

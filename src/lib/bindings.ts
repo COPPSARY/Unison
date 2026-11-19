@@ -5,6 +5,7 @@
 
 import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 import type { InvokeOptions } from "@tauri-apps/api/core";
+import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
@@ -28,6 +29,19 @@ export const commands = {
 	accountConnect: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<Account_Serialize>("account_connect", { provider }, options),
 	/**  Cancels a connect that is waiting for the browser. */
 	accountCancelConnect: (options?: InvokeOptions) => __TAURI_INVOKE<void>("account_cancel_connect", undefined, options),
+	/**
+	 *  Starts a sync now (all connected providers when `provider` is null). Returns immediately;
+	 *  progress arrives as `sync://progress` / `sync://finished` events.
+	 */
+	syncNow: (provider: ProviderId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("sync_now", { provider }, options),
+	/**  Cancels a running sync for `provider`. */
+	syncCancel: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<void>("sync_cancel", { provider }, options),
+};
+
+/** Events */
+export const events = {
+	syncFinished: makeEvent<SyncFinished_Serialize, SyncFinished_Deserialize>("sync://finished"),
+	syncProgress: makeEvent<SyncProgress_Serialize, SyncProgress_Deserialize>("sync://progress"),
 };
 
 /* Types */
@@ -173,6 +187,43 @@ export type SourceRef = {
 	url: string,
 };
 
+export type SyncFinished = SyncFinished_Serialize | SyncFinished_Deserialize;
+
+export type SyncFinished_Deserialize = {
+	provider: ProviderId,
+	added: number,
+	removed: number,
+	/**  Set when the sync failed or was cancelled. */
+	error?: AppError | null,
+};
+
+export type SyncFinished_Serialize = {
+	provider: ProviderId,
+	added: number,
+	removed: number,
+	/**  Set when the sync failed or was cancelled. */
+	error: AppError | null,
+};
+
+export type SyncProgress = SyncProgress_Serialize | SyncProgress_Deserialize;
+
+export type SyncProgress_Deserialize = {
+	provider: ProviderId,
+	stage: SyncStage,
+	done: number,
+	total?: number | null,
+};
+
+export type SyncProgress_Serialize = {
+	provider: ProviderId,
+	stage: SyncStage,
+	done: number,
+	total: number | null,
+};
+
+/**  What a sync is working on (shown in the sidebar status line). */
+export type SyncStage = "profile" | "liked" | "playlists" | "albums" | "artists" | "taste";
+
 export type Theme = "dark" | "light";
 
 /**  One song, possibly available on several platforms. */
@@ -208,3 +259,29 @@ export type Track_Serialize = {
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
 export type WindowMaterial = "mica" | "acrylic" | "off";
+
+/* Tauri Specta runtime */
+type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;
+
+type EventEmitTo<T> = [T] extends [null] ? (target: __TAURI_EVENT.EventTarget | string) => Promise<void> : (target: __TAURI_EVENT.EventTarget | string, payload: T) => Promise<void>;
+
+function makeEvent<TListen, TEmit = TListen>(name: string, serialize?: (payload: TEmit) => unknown, deserialize?: (payload: any) => TListen) {
+    const mapEvent = (cb: __TAURI_EVENT.EventCallback<TListen>) => (event: __TAURI_EVENT.Event<any>) => cb({ ...event, payload: deserialize ? deserialize(event.payload) : event.payload });
+    const mapPayload = (payload: TEmit) => serialize ? serialize(payload) : payload;
+
+    const base = {
+        listen: (cb: __TAURI_EVENT.EventCallback<TListen>) => __TAURI_EVENT.listen(name, mapEvent(cb)),
+        once: (cb: __TAURI_EVENT.EventCallback<TListen>) => __TAURI_EVENT.once(name, mapEvent(cb)),
+        emit: ((payload: TEmit) => __TAURI_EVENT.emit(name, mapPayload(payload)) as unknown) as EventEmit<TEmit>,
+        emitTo: ((to: __TAURI_EVENT.EventTarget | string, payload: TEmit) => __TAURI_EVENT.emitTo(to, name, mapPayload(payload)) as unknown) as EventEmitTo<TEmit>
+    };
+
+    const fn = (target: import("@tauri-apps/api/webview").Webview | import("@tauri-apps/api/window").Window) => ({
+        listen: (cb: __TAURI_EVENT.EventCallback<TListen>) => target.listen(name, mapEvent(cb)),
+        once: (cb: __TAURI_EVENT.EventCallback<TListen>) => target.once(name, mapEvent(cb)),
+        emit: ((payload: TEmit) => target.emit(name, mapPayload(payload)) as unknown) as EventEmit<TEmit>,
+        emitTo: ((to: __TAURI_EVENT.EventTarget | string, payload: TEmit) => target.emitTo(to, name, mapPayload(payload)) as unknown) as EventEmitTo<TEmit>
+    });
+
+    return Object.assign(fn, base);
+}

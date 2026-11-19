@@ -12,9 +12,14 @@ const cmd = {
   accountConnect: vi.fn(),
   accountCancelConnect: vi.fn(),
   spotifyOpenDashboard: vi.fn(),
+  syncNow: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
+  events: {
+    syncProgress: { listen: () => Promise.resolve(() => undefined) },
+    syncFinished: { listen: () => Promise.resolve(() => undefined) },
+  },
   commands: new Proxy(
     {},
     { get: (_t, name: string) => (...args: unknown[]) => (cmd as Record<string, (...a: unknown[]) => unknown>)[name]?.(...args) },
@@ -49,6 +54,7 @@ beforeEach(() => {
   ]);
   cmd.spotifySetClientId.mockResolvedValue(null);
   cmd.accountCancelConnect.mockResolvedValue(null);
+  cmd.syncNow.mockResolvedValue(null);
 });
 
 async function openDrawer() {
@@ -141,5 +147,26 @@ describe("Settings → Accounts", () => {
     await within(dialog).findByText(a.clientIdSaved);
     await userEvent.click(within(dialog).getByRole("button", { name: a.connect }));
     expect(await within(dialog).findByText(strings.errors.userNotRegistered)).toBeInTheDocument();
+  });
+
+  it("syncs on demand and shows when it last synced", async () => {
+    cmd.accountsList.mockResolvedValue([
+      { provider: "spotify", status: "connected", displayName: "Demo", lastSyncedAt: Math.floor(Date.now() / 1000) - 300 },
+      notConnected[1],
+    ]);
+    renderRoute("/settings");
+    expect(await screen.findByText(/Synced 5 minutes ago/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: strings.sync.syncNow }));
+    expect(cmd.syncNow).toHaveBeenCalledWith("spotify");
+  });
+
+  it("disables Sync now while syncing", async () => {
+    cmd.accountsList.mockResolvedValue([
+      { provider: "spotify", status: "syncing", displayName: "Demo", lastSyncedAt: null },
+      notConnected[1],
+    ]);
+    renderRoute("/settings");
+    expect(await screen.findByRole("button", { name: strings.sync.syncNow })).toBeDisabled();
+    expect(screen.getByText(a.statusSyncing)).toBeInTheDocument();
   });
 });

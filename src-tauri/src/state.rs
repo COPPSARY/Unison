@@ -7,19 +7,25 @@ use tokio::sync::oneshot;
 use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::core::auth::keychain::SecretStore;
+use crate::core::sync::SyncManager;
+use crate::providers::spotify::client::SpotifyClient;
 
 /// Shared state available to every command via `tauri::State<AppState>`.
 pub struct AppState {
     pub db: SqlitePool,
     pub http: reqwest::Client,
     pub secrets: Arc<dyn SecretStore>,
+    /// Shared so the token cache and the 4-request limit apply app-wide.
+    pub spotify: Arc<SpotifyClient>,
+    pub sync: SyncManager,
     /// Cancels the login currently waiting for the browser, if any.
     pending_auth: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl AppState {
     pub fn new(db: SqlitePool, http: reqwest::Client, secrets: Arc<dyn SecretStore>) -> Self {
-        Self { db, http, secrets, pending_auth: Mutex::new(None) }
+        let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
+        Self { db, http, secrets, spotify, sync: SyncManager::default(), pending_auth: Mutex::new(None) }
     }
 
     /// Registers a new login; any older one waiting for the browser is cancelled.

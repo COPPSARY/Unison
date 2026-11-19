@@ -85,6 +85,7 @@ pub fn run() {
             specta.mount_events(app);
             let material = init_core(app)?;
             create_main_window(app, material)?;
+            core::sync::scheduler::start(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!());

@@ -1,0 +1,15 @@
+{
+  "artists": {
+    "items": [
+      {
+        "id": "ar_1",
+        "name": "Demo Artist",
+        "images": [{ "url": "https://i.scdn.co/image/ar320", "width": 320, "height": 320 }]
+      }
+    ],
+    "next": null,
+    "total": 1,
+    "cursors": { "after": null },
+    "limit": 50
+  }
+}

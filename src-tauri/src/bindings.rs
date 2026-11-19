@@ -2,9 +2,10 @@
 //! `src/lib/bindings.ts` is regenerated from this on every debug run and by `cargo test`.
 
 use specta_typescript::Typescript;
-use tauri_specta::{collect_commands, Builder};
+use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::commands;
+use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
 use crate::model::{Account, Page, Playlist, Signal, Track};
 
@@ -26,7 +27,10 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::accounts::spotify_open_dashboard,
             commands::accounts::account_connect,
             commands::accounts::account_cancel_connect,
+            commands::sync::sync_now,
+            commands::sync::sync_cancel,
         ])
+        .events(collect_events![SyncProgress, SyncFinished])
         .typ::<AppError>()
         .typ::<Account>()
         .typ::<Page<Track>>()

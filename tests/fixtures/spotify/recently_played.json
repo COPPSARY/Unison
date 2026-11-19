@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "played_at": "2026-11-18T20:00:00.000Z",
+      "track": {
+        "id": "t00001",
+        "uri": "spotify:track:t00001",
+        "name": "Song 1",
+        "artists": [{ "id": "ar_1", "name": "Demo Artist" }],
+        "duration_ms": 200000
+      }
+    }
+  ],
+  "next": null,
+  "cursors": { "after": "1", "before": "0" },
+  "limit": 50
+}

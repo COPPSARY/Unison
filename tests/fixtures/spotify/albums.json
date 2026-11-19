@@ -1,0 +1,18 @@
+{
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "total": 1,
+  "items": [
+    {
+      "added_at": "2023-05-01T10:00:00Z",
+      "album": {
+        "id": "al_1",
+        "name": "Demo Album",
+        "artists": [{ "id": "ar_1", "name": "Demo Artist" }],
+        "images": [{ "url": "https://i.scdn.co/image/al300", "width": 300, "height": 300 }],
+        "release_date": "2021-03-04"
+      }
+    }
+  ]
+}

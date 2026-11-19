@@ -46,9 +46,21 @@ impl Default for RetryPolicy {
 /// (`/me/following`) wrap it in a key; see [`SpotifyClient::collect_pages`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct Paging<T> {
+    /// Spotify sometimes returns `null` entries (e.g. saved albums no longer in the catalog);
+    /// they are dropped here so one bad item can't fail a whole page.
+    #[serde(deserialize_with = "skip_nulls", bound(deserialize = "T: Deserialize<'de>"))]
     pub items: Vec<T>,
     pub next: Option<String>,
     pub total: Option<u32>,
+}
+
+fn skip_nulls<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let items: Option<Vec<Option<T>>> = Option::deserialize(deserializer)?;
+    Ok(items.unwrap_or_default().into_iter().flatten().collect())
 }
 
 pub struct SpotifyClient {
@@ -153,6 +165,8 @@ impl SpotifyClient {
         body: Option<&serde_json::Value>,
     ) -> AppResult<reqwest::Response> {
         let url = self.url(path_or_url);
+        // Endpoint path for error messages (no host, no query).
+        let endpoint = url::Url::parse(&url).map(|u| u.path().to_owned()).unwrap_or_default();
         let _permit = self
             .limit
             .acquire()
@@ -199,19 +213,19 @@ impl SpotifyClient {
                     let Some(wait) = self.policy.backoff.get(retries_5xx) else {
                         return Err(AppError::new(
                             ErrorCode::Upstream { status: s.as_u16() },
-                            "spotify server error",
+                            format!("spotify {method} {endpoint}: server error"),
                         ));
                     };
                     retries_5xx += 1;
                     tokio::time::sleep(*wait).await;
                 }
                 StatusCode::NOT_FOUND => {
-                    return Err(AppError::not_found("spotify item not found"));
+                    return Err(AppError::not_found(format!("spotify {method} {endpoint}: not found")));
                 }
                 s => {
                     return Err(AppError::new(
                         ErrorCode::Upstream { status: s.as_u16() },
-                        format!("spotify {} failed", method),
+                        format!("spotify {method} {endpoint} failed"),
                     ));
                 }
             }
@@ -219,11 +233,18 @@ impl SpotifyClient {
     }
 
     pub async fn get_json<T: DeserializeOwned>(&self, path_or_url: &str) -> AppResult<T> {
-        self.send(Method::GET, path_or_url, None)
+        let body = self
+            .send(Method::GET, path_or_url, None)
             .await?
-            .json::<T>()
+            .bytes()
             .await
-            .map_err(|e| AppError::internal(format!("spotify response: {e}")))
+            .map_err(network_error)?;
+        // serde's message names the field and position; the body itself is never logged.
+        serde_json::from_slice::<T>(&body).map_err(|e| {
+            let endpoint = path_or_url.split('?').next().unwrap_or_default();
+            let endpoint = endpoint.rsplit_once("/v1").map_or(endpoint, |(_, p)| p);
+            AppError::internal(format!("spotify {endpoint}: unexpected response ({e})"))
+        })
     }
 
     /// Follows `next` links from `first`, calling `on_page` for each page, up to `max_pages`.
@@ -392,6 +413,14 @@ mod tests {
         Mock::given(method("GET")).respond_with(ResponseTemplate::new(502)).expect(5).mount(&h.server).await;
         let err = h.client.get_json::<Value>("/me").await.unwrap_err();
         assert_eq!(err.code, ErrorCode::Upstream { status: 502 });
+    }
+
+    #[test]
+    fn paging_drops_null_items() {
+        let p: Paging<Value> = serde_json::from_str(r#"{"items":[{"a":1},null,{"a":2}],"next":null,"total":3}"#).unwrap();
+        assert_eq!(p.items.len(), 2);
+        let empty: Paging<Value> = serde_json::from_str(r#"{"items":null,"next":null}"#).unwrap();
+        assert!(empty.items.is_empty());
     }
 
     #[tokio::test]

@@ -250,5 +250,25 @@
     "about": "About",
     "version": "Version",
     "schema": "Database schema"
+  },
+  "sync": {
+    "syncNow": "Sync now",
+    "cancel": "Stop sync",
+    "stage": {
+      "profile": "Connecting",
+      "liked": "Syncing liked songs",
+      "playlists": "Syncing playlists",
+      "albums": "Syncing albums",
+      "artists": "Syncing artists",
+      "taste": "Learning your taste"
+    },
+    "progress": "{stage} · {done} of {total}",
+    "finished": "Sync finished",
+    "finishedBody": "{added} new, {removed} removed",
+    "upToDate": "Your library is up to date",
+    "failed": "Sync didn't finish",
+    "lastSynced": "Synced {when}",
+    "never": "Not synced yet",
+    "justNow": "just now"
   }
 }

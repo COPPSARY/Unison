@@ -5,8 +5,9 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
 use crate::core::db;
+use crate::core::sync::scheduler::spawn_sync;
 use crate::error::{AppError, AppResult};
-use crate::model::{Account, ProviderId};
+use crate::model::{Account, AccountStatus, ProviderId};
 use crate::providers::spotify::{self, connect::ConnectContext};
 use crate::state::AppState;
 
@@ -14,7 +15,13 @@ use crate::state::AppState;
 #[tauri::command]
 #[specta::specta]
 pub async fn accounts_list(state: State<'_, AppState>) -> AppResult<Vec<Account>> {
-    db::accounts::list(&state.db).await
+    let mut accounts = db::accounts::list(&state.db).await?;
+    for account in &mut accounts {
+        if account.status == AccountStatus::Connected && state.sync.is_running(account.provider) {
+            account.status = AccountStatus::Syncing;
+        }
+    }
+    Ok(accounts)
 }
 
 /// Validates and stores the Spotify Client ID in the keychain. Never echoed back.
@@ -67,8 +74,12 @@ pub async fn account_connect(app: AppHandle, state: State<'_, AppState>, provide
         ProviderId::Youtube => Err(AppError::internal("YouTube sign-in arrives in a later update")),
     };
     state.clear_pending_auth();
-    if let Err(err) = &result {
-        tracing::warn!(provider = provider.as_str(), code = ?err.code, "connect failed");
+    match &result {
+        // First full sync right after connecting (spec §8.5).
+        Ok(_) => {
+            spawn_sync(&app, provider);
+        }
+        Err(err) => tracing::warn!(provider = provider.as_str(), error = %err, "connect failed"),
     }
     result
 }

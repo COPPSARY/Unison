@@ -2,6 +2,7 @@
 //! Tokens and the Spotify Client ID never go in this database (keychain only).
 
 pub mod accounts;
+pub mod library;
 pub mod settings;
 
 use std::path::Path;
@@ -65,7 +66,9 @@ mod tests {
     async fn migrations_apply_on_an_empty_db() {
         let (dir, pool) = temp_db().await;
         assert!(dir.path().join("nested").join(DB_FILE).exists());
-        assert_eq!(schema_version(&pool).await.unwrap(), 1);
+        let latest = MIGRATOR.iter().map(|m| m.version).max().unwrap();
+        assert_eq!(schema_version(&pool).await.unwrap(), latest);
+        assert!(latest >= 2);
 
         let tables: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM sqlite_master WHERE type IN ('table') AND name NOT LIKE 'sqlite_%' ORDER BY name",
