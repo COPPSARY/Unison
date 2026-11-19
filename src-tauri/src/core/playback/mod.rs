@@ -3,3 +3,4 @@
 pub mod engine;
 pub mod player;
 pub mod queue;
+pub mod youtube;

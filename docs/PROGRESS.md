@@ -32,6 +32,22 @@ Acceptance criteria:
 - Status (2026-11-19): built and committed; Liked/Albums/Artists/Playlists + sidebar playlists
   read the real DB. Waiting for the owner to check 60 fps scrolling on the 10k demo DB.
 
+### UP-03 — YouTube embed fix
+Acceptance criteria:
+- Main window uses `use_https_scheme(true)` (production origin https://tauri.localhost).
+- `YouTubeHost` builds the iframe itself: `https://www.youtube-nocookie.com/embed/<id>?enablejsapi=1&origin=<origin>`,
+  `referrerpolicy="strict-origin-when-cross-origin"`, then attaches the official IFrame API;
+  visible at ≥ 200×200 px. Optional relay URL (`player.youtubeRelayUrl`) loads an owner-hosted
+  page instead (template in docs/youtube-relay/yt.html).
+- `player://youtube-command` event (load / play / pause / seek / stop / test) defined.
+- `youtube_test_playback` asks the UI to play a known embeddable video and resolves Ok when it
+  reaches PLAYING, `YoutubeEmbedBlocked{code}` on onError (101/150/152/153…), within 20 s.
+- Settings shows a "YouTube player" card with Test playback and the visible test player.
+- Tests: Rust error mapping + bridge; Vitest for the iframe attributes and the test card.
+- Live: the owner sees the test video play in the Windows app.
+- Status (2026-11-19): built and committed; waiting for the owner's live test in dev and in the
+  release build (https://tauri.localhost origin).
+
 ## Done
 
 - **UP-02 — Engines, queue, player state machine** (2026-11-19): `core/playback`: `Engine` and

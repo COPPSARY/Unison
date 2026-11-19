@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { renderRoute } from "@/test/render";
 
+const youtubeListeners: Array<(e: { payload: unknown }) => void> = [];
+
 const cmd = {
   appInfo: vi.fn(),
   accountsList: vi.fn(),
@@ -13,12 +15,21 @@ const cmd = {
   accountCancelConnect: vi.fn(),
   spotifyOpenDashboard: vi.fn(),
   syncNow: vi.fn(),
+  youtubeTestPlayback: vi.fn(),
+  youtubeTestReport: vi.fn(),
+  playlistsList: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
   events: {
     syncProgress: { listen: () => Promise.resolve(() => undefined) },
     syncFinished: { listen: () => Promise.resolve(() => undefined) },
+    playerYoutubeCommand: {
+      listen: (cb: (e: { payload: unknown }) => void) => {
+        youtubeListeners.push(cb);
+        return Promise.resolve(() => undefined);
+      },
+    },
   },
   commands: new Proxy(
     {},
@@ -55,6 +66,7 @@ beforeEach(() => {
   cmd.spotifySetClientId.mockResolvedValue(null);
   cmd.accountCancelConnect.mockResolvedValue(null);
   cmd.syncNow.mockResolvedValue(null);
+  cmd.playlistsList.mockResolvedValue([]);
 });
 
 async function openDrawer() {
@@ -168,5 +180,56 @@ describe("Settings → Accounts", () => {
     renderRoute("/settings");
     expect(await screen.findByRole("button", { name: strings.sync.syncNow })).toBeDisabled();
     expect(screen.getByText(a.statusSyncing)).toBeInTheDocument();
+  });
+});
+
+describe("Settings → YouTube player test", () => {
+  type Events = { onStateChange?: (e: { data: number }) => void; onError?: (e: { data: number }) => void };
+  let ytEvents: Events = {};
+  let attachedTo: HTMLIFrameElement | null = null;
+
+  beforeEach(() => {
+    youtubeListeners.length = 0;
+    window.YT = {
+      Player: vi.fn(function (el: HTMLIFrameElement, opts: { events?: Events }) {
+        attachedTo = el;
+        ytEvents = opts.events ?? {};
+      }) as unknown as NonNullable<typeof window.YT>["Player"],
+    };
+  });
+  afterEach(() => {
+    delete window.YT;
+  });
+
+  it("shows the official player with the fixed embed and reports PLAYING to Rust", async () => {
+    let resolveTest: () => void = () => undefined;
+    cmd.youtubeTestPlayback.mockReturnValue(new Promise<void>((r) => (resolveTest = r)));
+    cmd.youtubeTestReport.mockResolvedValue(null);
+    renderRoute("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: strings.settings.youtube.test }));
+    expect(screen.getByRole("button", { name: strings.settings.youtube.testing })).toBeDisabled();
+
+    // Rust asks the UI to play the test video.
+    await waitFor(() => expect(youtubeListeners.length).toBeGreaterThan(0));
+    youtubeListeners.forEach((cb) => cb({ payload: { type: "test", videoId: "jNQXAC9IVRw" } }));
+    const frame = (await screen.findByTitle(strings.settings.youtube.title)) as HTMLIFrameElement;
+    const src = new URL(frame.src);
+    expect(src.origin).toBe("https://www.youtube-nocookie.com");
+    expect(src.searchParams.get("origin")).toBe(window.location.origin);
+    expect(frame.getAttribute("referrerpolicy")).toBe("strict-origin-when-cross-origin");
+    expect(frame.className).toContain("min-h-[200px]");
+    await waitFor(() => expect(attachedTo).toBe(frame));
+
+    ytEvents.onStateChange?.({ data: 1 });
+    expect(cmd.youtubeTestReport).toHaveBeenCalledWith(true, null);
+    resolveTest();
+    expect(await screen.findByText(strings.settings.youtube.ok)).toBeInTheDocument();
+  });
+
+  it("reports embed errors and shows the reason", async () => {
+    cmd.youtubeTestPlayback.mockRejectedValue({ code: { type: "youtubeEmbedBlocked", code: 153 }, message: "x", retryable: false });
+    renderRoute("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: strings.settings.youtube.test }));
+    expect(await screen.findByText(/error 153/)).toBeInTheDocument();
   });
 });

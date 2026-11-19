@@ -7,6 +7,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use crate::commands;
 use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::player::PlayerSnapshot;
+use crate::core::playback::youtube::YoutubeCommand;
 use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
 use crate::model::{Account, Playlist, Signal, Track};
@@ -39,8 +40,10 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playlists::playlist_get,
             commands::playlists::playlist_tracks,
             commands::playlists::playlist_open_external,
+            commands::youtube::youtube_test_playback,
+            commands::youtube::youtube_test_report,
         ])
-        .events(collect_events![SyncProgress, SyncFinished])
+        .events(collect_events![SyncProgress, SyncFinished, YoutubeCommand])
         .typ::<AppError>()
         .typ::<Account>()
         .typ::<Track>()

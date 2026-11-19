@@ -50,10 +50,18 @@ export const commands = {
 	playlistTracks: (playlistId: string, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("playlist_tracks", { playlistId, offset, limit }, options),
 	/**  Opens the playlist on its platform in the default browser. */
 	playlistOpenExternal: (playlistId: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("playlist_open_external", { playlistId }, options),
+	/**
+	 *  Plays a known embeddable video in the visible test player and reports whether YouTube
+	 *  accepted the embed (Settings → YouTube player → Test playback).
+	 */
+	youtubeTestPlayback: (options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_test_playback", undefined, options),
+	/**  The UI's answer to a test: `ok` when the player reached PLAYING, else the onError code. */
+	youtubeTestReport: (ok: boolean, code: number | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_test_report", { ok, code }, options),
 };
 
 /** Events */
 export const events = {
+	playerYoutubeCommand: makeEvent<YoutubeCommand, YoutubeCommand>("player://youtube-command"),
 	syncFinished: makeEvent<SyncFinished_Serialize, SyncFinished_Deserialize>("sync://finished"),
 	syncProgress: makeEvent<SyncProgress_Serialize, SyncProgress_Deserialize>("sync://progress"),
 };
@@ -539,6 +547,11 @@ export type UnavailableReason = { type: "notConnected" } | { type: "premiumRequi
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
 export type WindowMaterial = "mica" | "acrylic" | "off";
+
+/**  Commands for the webview's YouTubeHost (spec §5 `player://youtube-command`). */
+export type YoutubeCommand = { type: "load"; videoId: string; startMs: number } | { type: "play" } | { type: "pause" } | { type: "seek"; positionMs: number } | { type: "stop" } | 
+/**  Play the test video and report through `youtube_test_report`. */
+{ type: "test"; videoId: string };
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

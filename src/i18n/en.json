@@ -262,7 +262,15 @@
   "settings": {
     "about": "About",
     "version": "Version",
-    "schema": "Database schema"
+    "schema": "Database schema",
+    "playback": "Playback",
+    "youtube": {
+      "title": "YouTube player",
+      "test": "Test playback",
+      "testing": "Testing…",
+      "ok": "YouTube playback works on this PC.",
+      "close": "Close player"
+    }
   },
   "sync": {
     "syncNow": "Sync now",

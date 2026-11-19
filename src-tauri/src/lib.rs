@@ -28,6 +28,9 @@ fn create_main_window(app: &tauri::App, saved: model::WindowMaterial) -> tauri::
         .min_inner_size(960.0, 600.0)
         // Custom title bar (T-04); Windows 11 still draws the rounded frame and shadow.
         .decorations(false)
+        // https://tauri.localhost in production: YouTube embeds need a real https origin and
+        // referrer (Universal Player addendum §0, UP-03).
+        .use_https_scheme(true)
         .shadow(true)
         .initialization_script(window_material::init_script(material));
 

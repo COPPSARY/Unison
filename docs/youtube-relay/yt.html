@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  Unison YouTube relay page (Universal Player addendum §0, step 4). Host this file on your own
+  HTTPS domain (e.g. https://player.example.com/yt.html) only if a real video still shows
+  "Error 153" in the Windows build with the direct embed. Then:
+    1. set Settings → Advanced → YouTube player relay URL to that address, and
+    2. add its origin to frame-src in src-tauri/tauri.conf.json (CSP) and rebuild.
+  It plays the video with YouTube's official IFrame API and forwards events to Unison with
+  postMessage. It never extracts audio and must stay visible (≥ 200×200 px).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unison player</title>
+    <style>
+      html, body, #player { margin: 0; width: 100%; height: 100%; background: #000; }
+    </style>
+  </head>
+  <body>
+    <div id="player"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const videoId = params.get("v") || "";
+      // Only talk to the Unison app origin passed in the URL.
+      const appOrigin = params.get("origin") || "";
+      const allowed = ["https://tauri.localhost", "http://tauri.localhost", "http://localhost:1420"];
+      const target = allowed.includes(appOrigin) ? appOrigin : null;
+      const send = (msg) => target && parent.postMessage(Object.assign({ unison: "yt" }, msg), target);
+      let player;
+
+      window.onYouTubeIframeAPIReady = () => {
+        player = new YT.Player("player", {
+          host: "https://www.youtube-nocookie.com",
+          videoId,
+          playerVars: { enablejsapi: 1, origin: location.origin, playsinline: 1, rel: 0, autoplay: 1 },
+          events: {
+            onReady: () => send({ event: "ready" }),
+            onStateChange: (e) => send({ event: "state", info: e.data }),
+            onError: (e) => send({ event: "error", info: e.data }),
+          },
+        });
+      };
+
+      // Commands from Unison: { unison: "yt", func: "playVideo" | "pauseVideo" | "seekTo" | ..., args: [] }
+      const commands = ["playVideo", "pauseVideo", "stopVideo", "seekTo", "loadVideoById", "setVolume"];
+      window.addEventListener("message", (e) => {
+        if (!target || e.origin !== target || !player) return;
+        const { unison, func, args } = e.data || {};
+        if (unison === "yt" && commands.includes(func)) player[func](...(args || []));
+      });
+    </script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+  </body>
+</html>
