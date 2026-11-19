@@ -15,6 +15,9 @@ use crate::model::SourceKind;
 
 /// "Previous" restarts the current track when it has played longer than this.
 const RESTART_THRESHOLD_MS: u32 = 3_000;
+/// Ticks the engine must disagree on playing/paused before the player follows it (paused
+/// or resumed outside Unison, e.g. in the Spotify app).
+const FOLLOW_TICKS: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +118,7 @@ pub struct Player {
     session: Option<Session>,
     fallbacks: Vec<FallbackEvent>,
     log: Vec<LogEntry>,
+    disagree: u8,
 }
 
 impl Player {
@@ -134,6 +138,7 @@ impl Player {
             session: None,
             fallbacks: Vec::new(),
             log: Vec::new(),
+            disagree: 0,
         }
     }
 
@@ -250,6 +255,7 @@ impl Player {
             self.session = Some(Session { track_id: track_id.clone(), kind: source.kind, last_pos: 0 });
             self.active = Some(source);
             self.status = PlayerStatus::Playing;
+            self.disagree = 0;
             return Ok(());
         }
 
@@ -274,6 +280,7 @@ impl Player {
         if let Some(engine) = self.active_engine() {
             engine.pause().await?;
             self.status = PlayerStatus::Paused;
+            self.disagree = 0;
         }
         Ok(())
     }
@@ -282,6 +289,7 @@ impl Player {
         if let Some(engine) = self.active_engine() {
             engine.play().await?;
             self.status = PlayerStatus::Playing;
+            self.disagree = 0;
         }
         Ok(())
     }
@@ -370,8 +378,14 @@ impl Player {
             self.on_ended().await?;
             return Ok(None);
         }
-        if state.playing && self.status == PlayerStatus::Paused {
-            self.status = PlayerStatus::Playing;
+        if state.playing == (self.status == PlayerStatus::Playing) {
+            self.disagree = 0;
+        } else {
+            self.disagree += 1;
+            if self.disagree >= FOLLOW_TICKS {
+                self.status = if state.playing { PlayerStatus::Playing } else { PlayerStatus::Paused };
+                self.disagree = 0;
+            }
         }
         Ok(Some(state))
     }
@@ -754,6 +768,21 @@ pub(crate) mod tests {
         assert_eq!((fb[0].from_provider, fb[0].to_provider), (SourceKind::Audius, SourceKind::Local));
         let rows = p.take_log();
         assert_eq!(rows[0], LogEntry { track_id: "t0".into(), provider: SourceKind::Audius, played_ms: 42_000, reason: EndedReason::Fallback });
+    }
+
+    #[tokio::test]
+    async fn follows_the_engine_only_after_it_disagrees_for_a_few_ticks() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let local = Arc::new(FakeEngine::plain(SourceKind::Local, log.clone()));
+        let mut p = player_with(vec![local.clone()], HashMap::new(), Policy::default());
+        p.play(ids(1), 0, None).await.unwrap();
+        p.pause().await.unwrap();
+        // FakeEngine always reports playing: a stale "playing" must not undo the pause at once.
+        p.tick().await.unwrap();
+        p.tick().await.unwrap();
+        assert_eq!(p.snapshot().status, PlayerStatus::Paused);
+        p.tick().await.unwrap();
+        assert_eq!(p.snapshot().status, PlayerStatus::Playing, "resumed outside Unison");
     }
 
     #[tokio::test]

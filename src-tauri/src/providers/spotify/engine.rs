@@ -2,7 +2,7 @@
 //! the Web API player endpoints. Spotify plays the audio; Unison never streams it.
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use reqwest::{Method, StatusCode};
@@ -17,6 +17,10 @@ use crate::model::SourceKind;
 pub const POLL_EVERY: Duration = Duration::from_secs(1);
 /// "Ended" when paused within this much of the end (spec §8.6).
 const END_MARGIN_MS: u32 = 1_000;
+/// Progress this close to the end counts as "reached the end" (polls are 1 s apart).
+const NEAR_END_MS: u32 = 4_000;
+/// Spotify's reported state lags our commands; trust our own state for this many polls after one.
+const HOLD_POLLS: f32 = 2.5;
 
 #[derive(Debug, Clone, Default)]
 struct Inner {
@@ -24,8 +28,21 @@ struct Inner {
     /// Spotify track id we started.
     track_id: Option<String>,
     device_id: Option<String>,
-    /// Highest progress seen for this item (for "paused at 0 after progress").
+    /// Highest progress seen for this item.
     max_progress: u32,
+    /// Ignore polled state until then (just after load / play / pause / seek).
+    hold_until: Option<Instant>,
+}
+
+impl Inner {
+    /// Played up to (nearly) the end of the item.
+    fn reached_end(&self) -> bool {
+        self.state.duration_ms.is_some_and(|d| self.max_progress.saturating_add(NEAR_END_MS) >= d)
+    }
+
+    fn hold(&mut self, hold: Duration) {
+        self.hold_until = Some(Instant::now() + hold);
+    }
 }
 
 #[derive(Deserialize)]
@@ -40,6 +57,14 @@ struct PlaybackJson {
 struct ItemJson {
     id: Option<String>,
     duration_ms: Option<u32>,
+    /// Set when Spotify relinked the requested track to another id for the user's market.
+    #[serde(default)]
+    linked_from: Option<LinkedJson>,
+}
+
+#[derive(Deserialize)]
+struct LinkedJson {
+    id: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -64,6 +89,8 @@ pub struct SpotifyConnectEngine {
     inner: Arc<Mutex<Inner>>,
     poller: Mutex<Option<tokio::task::JoinHandle<()>>>,
     poll_every: Duration,
+    /// How long polled state is ignored after a command.
+    hold: Duration,
 }
 
 impl SpotifyConnectEngine {
@@ -79,6 +106,7 @@ impl SpotifyConnectEngine {
             inner: Arc::new(Mutex::new(Inner::default())),
             poller: Mutex::new(None),
             poll_every,
+            hold: poll_every.mul_f32(HOLD_POLLS),
         }
     }
 
@@ -187,38 +215,54 @@ async fn poll_once(client: &SpotifyClient, inner: &Mutex<Inner>) -> AppResult<bo
     if i.track_id.is_none() {
         return Ok(false);
     }
-    apply_poll(&mut i, playback.as_ref());
+    apply_poll(&mut i, playback.as_ref(), Instant::now());
     Ok(!i.state.ended)
 }
 
-/// Updates state from a playback snapshot (spec §8.6 ended rules).
-fn apply_poll(i: &mut Inner, playback: Option<&PlaybackJson>) {
+/// Updates state from a playback snapshot (spec §8.6): an item has ended only when it is paused
+/// in its last second, or when it had played to (nearly) the end and Spotify then reset it to 0,
+/// moved to another item or stopped. Buffering, switching and pauses mid-track are not the end.
+fn apply_poll(i: &mut Inner, playback: Option<&PlaybackJson>, now: Instant) {
+    if i.hold_until.is_some_and(|t| now < t) {
+        // Still reflects the state before our last command.
+        return;
+    }
+    i.hold_until = None;
     let Some(p) = playback else {
-        // Nothing playing anywhere any more: treat as ended once we had progress.
+        // Nothing playing anywhere: the end if we were at the end, otherwise Spotify was closed.
         i.state.playing = false;
-        i.state.ended = i.max_progress > 0;
+        i.state.ended = i.reached_end();
         return;
     };
+    let ours = i.track_id.as_deref();
+    let same_item = p.item.as_ref().is_some_and(|it| {
+        it.id.as_deref() == ours || it.linked_from.as_ref().and_then(|l| l.id.as_deref()) == ours
+    });
     let progress = p.progress_ms.unwrap_or(0);
-    let same_item = p.item.as_ref().and_then(|it| it.id.as_deref()) == i.track_id.as_deref();
-    if let Some(d) = p.item.as_ref().and_then(|it| it.duration_ms).filter(|_| same_item) {
-        i.state.duration_ms = Some(d);
+    if same_item {
+        if let Some(d) = p.item.as_ref().and_then(|it| it.duration_ms) {
+            i.state.duration_ms = Some(d);
+        }
     }
     let duration = i.state.duration_ms.unwrap_or(u32::MAX);
 
-    let moved_on = !same_item && i.max_progress > 0;
-    let reset_to_zero = same_item && !p.is_playing && progress == 0 && i.max_progress > 0;
     let paused_at_end = same_item && !p.is_playing && progress.saturating_add(END_MARGIN_MS) >= duration;
-    if moved_on || reset_to_zero || paused_at_end {
+    let after_end = i.reached_end() && (!same_item || (!p.is_playing && progress == 0));
+    if paused_at_end || after_end {
         i.state.ended = true;
         i.state.playing = false;
         return;
     }
-    if same_item {
-        i.state.position_ms = progress;
-        i.max_progress = i.max_progress.max(progress);
-        i.state.playing = p.is_playing;
+    if !same_item {
+        // Something else plays in Spotify mid-track (picked in the Spotify app): not ours to follow.
+        if i.max_progress > 0 {
+            i.state.playing = false;
+        }
+        return;
     }
+    i.state.position_ms = progress;
+    i.max_progress = i.max_progress.max(progress);
+    i.state.playing = p.is_playing;
 }
 
 #[async_trait]
@@ -253,6 +297,7 @@ impl Engine for SpotifyConnectEngine {
                 track_id: Some(source.item_id.clone()),
                 device_id: Some(device),
                 max_progress: 0,
+                hold_until: Some(Instant::now() + self.hold),
             };
         }
         let body = serde_json::json!({
@@ -279,6 +324,10 @@ impl Engine for SpotifyConnectEngine {
 
     async fn play(&self) -> AppResult<()> {
         self.command(Method::PUT, self.path("/me/player/play", ""), None).await?;
+        if let Ok(mut i) = self.inner.lock() {
+            i.state.playing = true;
+            i.hold(self.hold);
+        }
         self.start_polling();
         Ok(())
     }
@@ -287,6 +336,7 @@ impl Engine for SpotifyConnectEngine {
         let result = self.command(Method::PUT, self.path("/me/player/pause", ""), None).await;
         if let Ok(mut i) = self.inner.lock() {
             i.state.playing = false;
+            i.hold(self.hold);
         }
         result
     }
@@ -311,6 +361,8 @@ impl Engine for SpotifyConnectEngine {
         if let Ok(mut i) = self.inner.lock() {
             i.state.position_ms = position_ms;
             i.state.ended = false;
+            i.max_progress = position_ms;
+            i.hold(self.hold);
         }
         Ok(())
     }
@@ -418,43 +470,100 @@ mod tests {
         assert_eq!(e.state().await.unwrap(), EngineState::default());
     }
 
-    #[test]
-    fn ended_rules() {
-        let base = || Inner {
-            state: EngineState { duration_ms: Some(200_000), ..EngineState::default() },
+    fn base() -> Inner {
+        Inner {
+            state: EngineState { duration_ms: Some(200_000), playing: true, ..EngineState::default() },
             track_id: Some("t1".into()),
             device_id: None,
             max_progress: 50_000,
-        };
-        let snap = |playing: bool, progress: u32, id: &str| PlaybackJson {
+            hold_until: None,
+        }
+    }
+
+    fn snap(playing: bool, progress: u32, id: &str) -> PlaybackJson {
+        PlaybackJson {
             is_playing: playing,
             progress_ms: Some(progress),
-            item: Some(ItemJson { id: Some(id.into()), duration_ms: Some(200_000) }),
-        };
+            item: Some(ItemJson { id: Some(id.into()), duration_ms: Some(200_000), linked_from: None }),
+        }
+    }
 
+    fn poll(i: &mut Inner, p: Option<PlaybackJson>) {
+        apply_poll(i, p.as_ref(), Instant::now());
+    }
+
+    #[test]
+    fn ended_rules() {
         let mut i = base();
-        apply_poll(&mut i, Some(&snap(true, 60_000, "t1")));
+        poll(&mut i, Some(snap(true, 60_000, "t1")));
         assert!(i.state.playing && !i.state.ended && i.state.position_ms == 60_000);
 
         let mut i = base();
-        apply_poll(&mut i, Some(&snap(true, 1_000, "other")));
-        assert!(i.state.ended, "Spotify moved on to another track");
+        poll(&mut i, Some(snap(false, 199_500, "t1")));
+        assert!(i.state.ended, "paused in the last second");
+
+        let mut i = Inner { max_progress: 198_000, ..base() };
+        poll(&mut i, Some(snap(false, 0, "t1")));
+        assert!(i.state.ended, "reset to 0 after reaching the end");
+
+        let mut i = Inner { max_progress: 198_000, ..base() };
+        poll(&mut i, Some(snap(true, 1_000, "radio")));
+        assert!(i.state.ended, "moved on after reaching the end (autoplay)");
+
+        let mut i = Inner { max_progress: 198_000, ..base() };
+        poll(&mut i, None);
+        assert!(i.state.ended, "stopped at the end");
 
         let mut i = base();
-        apply_poll(&mut i, Some(&snap(false, 0, "t1")));
-        assert!(i.state.ended, "paused at 0 after progress");
-
-        let mut i = base();
-        apply_poll(&mut i, Some(&snap(false, 199_500, "t1")));
-        assert!(i.state.ended, "paused at the end");
-
-        let mut i = base();
-        apply_poll(&mut i, Some(&snap(false, 120_000, "t1")));
+        poll(&mut i, Some(snap(false, 120_000, "t1")));
         assert!(!i.state.ended && !i.state.playing, "a normal pause is not the end");
+    }
+
+    #[test]
+    fn mid_track_glitches_are_not_the_end() {
+        let mut i = base();
+        poll(&mut i, Some(snap(false, 0, "t1")));
+        assert!(!i.state.ended, "paused at 0 mid-track (buffering) is not the end");
+
+        let mut i = base();
+        poll(&mut i, None);
+        assert!(!i.state.ended && !i.state.playing, "nothing playing mid-track: stopped, not ended");
+
+        let mut i = base();
+        poll(&mut i, Some(snap(true, 1_000, "other")));
+        assert!(!i.state.ended && !i.state.playing, "another song picked in Spotify is not our end");
 
         let mut i = Inner { max_progress: 0, ..base() };
-        apply_poll(&mut i, Some(&snap(false, 0, "t1")));
-        assert!(!i.state.ended, "not started yet");
+        poll(&mut i, Some(snap(true, 30_000, "previous")));
+        assert!(!i.state.ended && i.state.playing, "Spotify still reports the previous song");
+    }
+
+    #[test]
+    fn relinked_track_counts_as_the_same_item() {
+        let mut i = base();
+        let p = PlaybackJson {
+            is_playing: true,
+            progress_ms: Some(70_000),
+            item: Some(ItemJson {
+                id: Some("relinked".into()),
+                duration_ms: Some(200_000),
+                linked_from: Some(LinkedJson { id: Some("t1".into()) }),
+            }),
+        };
+        poll(&mut i, Some(p));
+        assert_eq!(i.state.position_ms, 70_000);
+    }
+
+    #[test]
+    fn polls_are_ignored_right_after_a_command() {
+        let mut i = base();
+        i.state.playing = false; // we just paused
+        i.hold(POLL_EVERY);
+        poll(&mut i, Some(snap(true, 61_000, "t1")));
+        assert!(!i.state.playing, "a stale 'playing' doesn't undo the pause");
+        i.hold_until = Some(Instant::now() - Duration::from_millis(1));
+        poll(&mut i, Some(snap(false, 61_000, "t1")));
+        assert!(!i.state.playing && i.hold_until.is_none());
     }
 
     #[tokio::test]
