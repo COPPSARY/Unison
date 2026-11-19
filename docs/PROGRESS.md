@@ -13,6 +13,14 @@ Acceptance criteria:
 
 ## Done
 
+- **T-10 — PKCE, loopback, keychain** (2026-11-19): `core/auth`: PKCE S256 (64-byte verifier,
+  32-byte state, RFC 7636 vector test, constant-time state check); one-shot 127.0.0.1 listener
+  on preferred ports (Spotify) or any port (Google), ignores stray/forged requests, close-tab
+  page, 5 min timeout, cancellable; generic OAuth client (authorize URL, code exchange,
+  refresh keeping un-rotated refresh tokens, invalid_grant → NeedsReconnect, transport errors
+  → Offline); keychain `SecretStore` (Credential Manager via keyring, memory store for tests),
+  verified against the real Credential Manager. Manual browser check runs with T-11.
+
 - **T-06 — Provider trait, models, settings, single instance** (2026-11-19): §5 models
   (ProviderId, SourceRef, Track, Playlist, Page, Account, Signal) in bindings; object-safe
   async `MusicProvider` trait; `Settings` stored per key as JSON with per-field fallback and
