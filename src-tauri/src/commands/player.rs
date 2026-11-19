@@ -19,6 +19,20 @@ pub async fn spotify_capabilities(state: State<'_, AppState>, refresh: bool) -> 
     player::capabilities(&state.spotify, &state.spotify_premium).await
 }
 
+/// Chooses the Spotify Connect device to play on (`None` = active / first available).
+#[tauri::command]
+#[specta::specta]
+pub fn spotify_set_device(state: State<'_, AppState>, device_id: Option<String>) {
+    state.spotify_engine.set_device(device_id);
+}
+
+/// The chosen Spotify Connect device, if any.
+#[tauri::command]
+#[specta::specta]
+pub fn spotify_chosen_device(state: State<'_, AppState>) -> Option<String> {
+    state.spotify_engine.chosen_device()
+}
+
 /// Audio output devices for the NativeEngine (Settings → Playback → Output).
 #[tauri::command]
 #[specta::specta]

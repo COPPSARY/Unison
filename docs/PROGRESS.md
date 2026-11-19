@@ -60,6 +60,12 @@ Acceptance criteria:
 
 ## Done
 
+- **UP-08 — SpotifyConnectEngine** (2026-11-19): remote control via PUT /me/player/play {uris,
+  position_ms} on the chosen / active / first controllable device, pause / resume / seek /
+  volume, 1 s polling of GET /me/player with the §8.6 ended rules; Premium 403 → not-Premium +
+  SpotifyPremiumRequired, 404 → NoSpotifyDevice; `spotify_set_device` / `spotify_chosen_device`.
+  6 wiremock tests. Live check happens with UP-09.
+
 - **UP-07 — YouTubeEngine bridge** (2026-11-19): Rust `YouTubeEngine` (Engine, kind youtube) sends
   load/play/pause/seek/volume/stop as `player://youtube-command`; `youtube_player_report` feeds
   playing/paused/ended/error + position/duration back; `youtube_host_ready` gates can_play so

@@ -3,6 +3,7 @@
 
 pub mod client;
 pub mod connect;
+pub mod engine;
 pub mod map;
 pub mod models;
 pub mod player;

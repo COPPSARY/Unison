@@ -47,6 +47,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::youtube::youtube_player_report,
             commands::youtube::youtube_host_ready,
             commands::player::spotify_capabilities,
+            commands::player::spotify_set_device,
+            commands::player::spotify_chosen_device,
             commands::player::player_outputs,
             commands::player::player_set_output,
             commands::player::player_test_sound,

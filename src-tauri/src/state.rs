@@ -23,7 +23,9 @@ pub struct AppState {
     pub youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     pub sync: SyncManager,
     /// Spotify Premium answer, cached 1 h (UP-04).
-    pub spotify_premium: crate::providers::spotify::player::PremiumCache,
+    pub spotify_premium: Arc<crate::providers::spotify::player::PremiumCache>,
+    /// Spotify Connect remote control (UP-08).
+    pub spotify_engine: Arc<crate::providers::spotify::engine::SpotifyConnectEngine>,
     /// Pending YouTube Test playback (UP-03).
     pub youtube_test: crate::core::playback::youtube::YoutubeTestHub,
     /// One playlist-items fetch at a time.
@@ -41,6 +43,11 @@ impl AppState {
         youtube: Arc<crate::core::playback::youtube_engine::YouTubeEngine>,
     ) -> Self {
         let spotify = Arc::new(SpotifyClient::new(http.clone(), secrets.clone(), db.clone()));
+        let spotify_premium = Arc::new(crate::providers::spotify::player::PremiumCache::default());
+        let spotify_engine = Arc::new(crate::providers::spotify::engine::SpotifyConnectEngine::new(
+            spotify.clone(),
+            spotify_premium.clone(),
+        ));
         Self {
             db,
             http,
@@ -51,7 +58,8 @@ impl AppState {
             sync: SyncManager::default(),
             playlist_lock: tokio::sync::Mutex::new(()),
             youtube_test: crate::core::playback::youtube::YoutubeTestHub::default(),
-            spotify_premium: crate::providers::spotify::player::PremiumCache::default(),
+            spotify_premium,
+            spotify_engine,
             pending_auth: Mutex::new(None),
         }
     }

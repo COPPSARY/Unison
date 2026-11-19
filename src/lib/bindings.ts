@@ -63,6 +63,10 @@ export const commands = {
 	youtubeHostReady: (ready: boolean, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_host_ready", { ready }, options),
 	/**  Spotify Premium (cached 1 h when known) and the current Spotify Connect devices. */
 	spotifyCapabilities: (refresh: boolean, options?: InvokeOptions) => __TAURI_INVOKE<SpotifyCapabilities_Serialize>("spotify_capabilities", { refresh }, options),
+	/**  Chooses the Spotify Connect device to play on (`None` = active / first available). */
+	spotifySetDevice: (deviceId: string | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("spotify_set_device", { deviceId }, options),
+	/**  The chosen Spotify Connect device, if any. */
+	spotifyChosenDevice: (options?: InvokeOptions) => __TAURI_INVOKE<string | null>("spotify_chosen_device", undefined, options),
 	/**  Audio output devices for the NativeEngine (Settings → Playback → Output). */
 	playerOutputs: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("player_outputs", undefined, options),
 	/**  Switches the NativeEngine output (mid-track) and saves it (`None` = system default). */
