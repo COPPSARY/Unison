@@ -218,6 +218,36 @@ Acceptance criteria:
   green (Linux). Not committed. Not covered yet: making playlists, extension settings UI
   (logins / server URLs), "*" network permission (Jellyfin).
 
+### EXT-05 — Play metadata-only songs through a streaming extension (owner-approved 2026-11-21)
+Acceptance criteria:
+- A song whose sources can't stream (metadata-only extensions, no getDownloadUrl) plays when
+  another enabled extension can: at play time Rust searches the extensions that can both search
+  and stream for "<artist> <title>", accepts a hit only on equal ISRC or the strict §8.2 merge,
+  attaches it to the same tracks row and plays it. Never a different song; a miss is a clear
+  error, and the miss is remembered for 10 minutes so repeated presses don't search again.
+- Metadata-only sources are skipped at once (not loaded and failed).
+- getDownloadUrl may answer `{ url, headers?, mimeType? }`: allowlisted headers (User-Agent,
+  Referer, Origin, Authorization, Cookie) go with the stream requests, dropped on a redirect to
+  another host, never logged; mimeType is the decoder hint.
+- Stream requests send Accept-Encoding: identity; a 200 to a Range request skips ahead to the
+  wanted offset; a 401/403/404/410 on open re-resolves the URL once. The extension's probe
+  passes the length on, so the player doesn't fetch a signed URL a second time.
+- Errors say what failed: stream-open failures are ExtensionFailed (not "Audius isn't
+  reachable"); when every source fails, the last real error is returned.
+- The automatic Stream quality tier never picks Opus or Dolby (E-AC-3/AC-4/Atmos) options,
+  which this build can't decode; a user's own pick is unchanged.
+- Idea (not code) from the owner's Android app: catalogs give metadata, audio-source extensions
+  are asked at play time. That app is GPL-3.0; nothing is copied from it.
+- Live fix (2026-11-21): getDownloadUrl stubs that answer null (Amazon, Deezer, SoundCloud,
+  YouTube Music in the Mornye store) are learnt as download-only and skipped; every strict match
+  is attached so a stub can't hide a real streamer; "only downloads" never ends up as the final
+  error (NoPlayableSource instead, reworded).
+- Live check (ignored test `live_play_through_installed_extensions`, on a copy of the owner's DB):
+  "Arijit Singh Tum Hi Ho" resolves through JioSaavn and decodes (AAC, 262 s). GMENGZ songs:
+  JioSaavn doesn't carry them; every service that does is download-only or encrypted here.
+- Status (2026-11-21): built; clippy -D warnings, 164 Rust + 115 Vitest tests green (Windows).
+  Not committed.
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

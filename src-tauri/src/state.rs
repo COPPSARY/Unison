@@ -29,7 +29,8 @@ impl AppState {
     ) -> Self {
         native.set_stream_resolver(extensions.clone());
         let engines: Vec<Arc<dyn crate::core::playback::engine::Engine>> = vec![native.clone()];
-        let player = crate::core::playback::service::PlayerService::new(db.clone(), engines, volume);
+        let finder: Arc<dyn crate::core::playback::engine::SourceFinder> = extensions.clone();
+        let player = crate::core::playback::service::PlayerService::new(db.clone(), engines, volume, Some(finder));
         Self {
             player,
             db,

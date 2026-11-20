@@ -90,17 +90,23 @@ impl QualityOption {
         has_any(&self.text(), &["low", "saver", "64k", "96k", "128"])
     }
 
-    /// M4A-family (compressed) streams.
+    /// Compressed streams this build decodes (AAC/M4A, MP3, Vorbis).
     fn is_high(&self) -> bool {
-        !self.is_lossless() && !self.is_low() && has_any(&self.text(), &["aac", "m4a", "opus", "mp3", "high", "256", "320", "160"])
+        !self.is_lossless() && !self.is_low() && has_any(&self.text(), &["aac", "m4a", "mp3", "high", "256", "320", "160"])
+    }
+
+    /// Codecs symphonia can't decode here (Opus, Dolby); never picked automatically.
+    fn undecodable(&self) -> bool {
+        has_any(&self.text(), &["opus", "eac3", "e-ac-3", "ac3", "ac-3", "ac4", "ac-4", "atmos", "dolby", "webm"])
     }
 }
 
 /// The option of `options` that fits `tier`, or `None` when the extension has nothing there.
+/// Options in codecs Unison can't decode are skipped.
 pub fn match_quality(options: &[QualityOption], tier: StreamQuality) -> Option<String> {
-    let first = |f: &dyn Fn(&QualityOption) -> bool| options.iter().find(|o| f(o)).map(|o| o.id.clone());
+    let first = |f: &dyn Fn(&QualityOption) -> bool| options.iter().filter(|o| !o.undecodable()).find(|o| f(o)).map(|o| o.id.clone());
     match tier {
-        StreamQuality::Best => first(&|o| o.is_best()).or_else(|| first(&|o| o.is_lossless())).or_else(|| options.first().map(|o| o.id.clone())),
+        StreamQuality::Best => first(&|o| o.is_best()).or_else(|| first(&|o| o.is_lossless())).or_else(|| first(&|_| true)),
         StreamQuality::Lossless => first(&|o| o.is_lossless()),
         StreamQuality::High => first(&|o| o.is_high()),
         StreamQuality::Low => first(&|o| o.is_low()),
@@ -109,13 +115,14 @@ pub fn match_quality(options: &[QualityOption], tier: StreamQuality) -> Option<S
 
 /// The quality to stream for an extension: the one picked for this play, else the tier from
 /// Settings when the extension has an option for it, else the extension's own default (its
-/// first option). `None` when it lists no qualities.
+/// first option Unison can decode, else its first). `None` when it lists no qualities.
 pub fn effective_quality(manifest: &ScriptManifest, picked: Option<&str>, tier: StreamQuality) -> Option<String> {
+    let q = &manifest.qualities;
     picked
-        .filter(|p| manifest.qualities.iter().any(|o| o.id == *p))
+        .filter(|p| q.iter().any(|o| o.id == *p))
         .map(str::to_owned)
-        .or_else(|| match_quality(&manifest.qualities, tier))
-        .or_else(|| manifest.qualities.first().map(|o| o.id.clone()))
+        .or_else(|| match_quality(q, tier))
+        .or_else(|| q.iter().find(|o| !o.undecodable()).or_else(|| q.first()).map(|o| o.id.clone()))
 }
 
 /// A manifest `name` → an id Unison accepts (`a–z 0–9 -`, 3–40 characters).
@@ -352,6 +359,55 @@ pub fn map_search(ext_id: &str, body: &Value) -> AppResult<Vec<MappedItem>> {
         .collect())
 }
 
+/// Request headers an extension may ask Unison to send with its stream (lower case).
+pub const STREAM_HEADERS: [&str; 5] = ["user-agent", "referer", "origin", "authorization", "cookie"];
+const MAX_HEADER_VALUE: usize = 4096;
+
+/// A `getDownloadUrl` answer: where the audio is, the headers its service needs and its type.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StreamAnswer {
+    pub url: Url,
+    pub headers: Vec<(String, String)>,
+    pub mime: Option<String>,
+}
+
+// Header values may hold credentials: never print them.
+impl std::fmt::Debug for StreamAnswer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(n, _)| n.as_str()).collect();
+        f.debug_struct("StreamAnswer").field("host", &self.url.host_str()).field("headers", &names).field("mime", &self.mime).finish()
+    }
+}
+
+/// Allowlisted headers from an answer's `headers` object; anything else is dropped.
+fn stream_headers(body: &Value) -> Vec<(String, String)> {
+    let Some(map) = body.get("headers").and_then(Value::as_object) else { return Vec::new() };
+    map.iter()
+        .filter_map(|(name, value)| {
+            let name = name.trim().to_ascii_lowercase();
+            let value = value.as_str()?.trim();
+            let ok = STREAM_HEADERS.contains(&name.as_str())
+                && !value.is_empty()
+                && value.len() <= MAX_HEADER_VALUE
+                && value.chars().all(|c| c != '\r' && c != '\n' && c != '\0');
+            ok.then(|| (name, value.to_owned()))
+        })
+        .collect()
+}
+
+/// Reads a `getDownloadUrl` answer: a bare URL string, or `{ success, url, headers?,
+/// mimeType? }`.
+pub fn stream_answer(body: &Value) -> AppResult<StreamAnswer> {
+    let url = stream_url(body)?;
+    let mime = ["mimeType", "mime_type", "format"]
+        .iter()
+        .find_map(|k| body.get(*k).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|m| !m.is_empty() && m.len() <= 64)
+        .map(str::to_owned);
+    Ok(StreamAnswer { url, headers: stream_headers(body), mime })
+}
+
 /// Reads the URL out of a `getDownloadUrl` answer (`{ success, url }` or a bare string).
 pub fn stream_url(body: &Value) -> AppResult<Url> {
     // Some extensions register getDownloadUrl only as a stub (`return null`): they download
@@ -422,10 +478,16 @@ pub(crate) mod tests {
         let qobuz = options(&[("HI_RES_LOSSLESS", "24-Bit Max"), ("HI_RES", "24-Bit"), ("LOSSLESS", "Lossless")]);
         let high = |o: &[QualityOption]| match_quality(o, StreamQuality::High);
         assert_eq!(high(&tidal).as_deref(), Some("HIGH"));
-        assert_eq!(high(&amazon).as_deref(), Some("opus"));
+        assert_eq!(high(&amazon), None, "Opus and Dolby can't be decoded here: never picked by the tier");
         assert_eq!(high(&soundcloud).as_deref(), Some("aac_160"));
         assert_eq!(high(&qobuz), None, "nothing compressed: the extension's own default applies");
         assert_eq!(match_quality(&tidal, StreamQuality::Lossless).as_deref(), Some("HI_RES_LOSSLESS"));
+        assert_eq!(match_quality(&tidal, StreamQuality::Best).as_deref(), Some("HI_RES_LOSSLESS"), "Dolby Atmos is skipped");
+        let opus_first = options(&[("opus", "Opus 320kbps"), ("aac", "AAC 256")]);
+        let mut m = ScriptManifest::parse(manifest_json("api.example.org").to_string().as_bytes()).unwrap();
+        m.qualities = opus_first;
+        assert_eq!(effective_quality(&m, None, StreamQuality::Lossless).as_deref(), Some("aac"), "default skips Opus");
+        assert_eq!(effective_quality(&m, Some("opus"), StreamQuality::High).as_deref(), Some("opus"), "a user's pick stands");
         assert_eq!(match_quality(&soundcloud, StreamQuality::Lossless), None);
         assert_eq!(match_quality(&tidal, StreamQuality::Low).as_deref(), Some("LOW"));
         assert_eq!(match_quality(&amazon, StreamQuality::Best).as_deref(), Some("best"));
@@ -476,6 +538,24 @@ pub(crate) mod tests {
         );
         assert!(stream_url(&json!({ "success": true })).is_err());
         assert_eq!(stream_url(&Value::Null).unwrap_err().code, ErrorCode::ExtensionUnsupported, "download-only stub");
+    }
+
+    #[test]
+    fn reads_stream_headers_and_type() {
+        let a = stream_answer(&json!({
+            "url": "https://a.example/x",
+            "mimeType": "audio/flac",
+            "headers": { "Referer": "https://a.example/", "User-Agent": "Mozilla/5.0", "Host": "evil.example",
+                         "X-Secret": "1", "Cookie": "bad\r\nInjected: 1", "Origin": 5 }
+        }))
+        .unwrap();
+        assert_eq!(a.mime.as_deref(), Some("audio/flac"));
+        let mut names: Vec<&str> = a.headers.iter().map(|(n, _)| n.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["referer", "user-agent"], "only allowlisted, well-formed headers");
+        assert!(!format!("{a:?}").contains("Mozilla"), "values never printed");
+        let bare = stream_answer(&json!("https://a.example/y.mp3")).unwrap();
+        assert!(bare.headers.is_empty() && bare.mime.is_none());
     }
 
     #[test]

@@ -14,7 +14,8 @@ use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Source};
 use tokio::sync::oneshot;
 
 use super::engine::{Engine, EngineState, PlaySource, UnavailableReason};
-use super::http_source::{HttpSource, StreamHandle};
+pub use super::http_source::StreamTarget;
+use super::http_source::{HttpSource, StreamError, StreamHandle};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::SourceKind;
 
@@ -43,6 +44,19 @@ pub fn amplitude(volume: u8, gain_db: Option<f32>) -> f32 {
     let base = (f32::from(volume.min(100)) / 100.0).powi(2);
     let gain = gain_db.map_or(1.0, |db| 10f32.powf(db / 20.0)).clamp(0.0, 2.0);
     base * gain
+}
+
+/// A stream that didn't open: the server's status when it refused, else a failure.
+fn stream_error(err: StreamError) -> AppError {
+    match err.status {
+        Some(status) => AppError::new(ErrorCode::Upstream { status }, err.message),
+        None => AppError::new(ErrorCode::ExtensionFailed, format!("stream: {}", err.message)),
+    }
+}
+
+/// The URL was refused in a way a fresh one may fix (expired or rotated signed URL).
+fn is_expired(err: &AppError) -> bool {
+    matches!(err.code, ErrorCode::Upstream { status: 401 | 403 | 404 | 410 })
 }
 
 fn decoder_error(err: DecoderError) -> AppError {
@@ -96,7 +110,7 @@ type Reply<T> = oneshot::Sender<AppResult<T>>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Loaded {
     File(PathBuf),
-    Url(String),
+    Url(StreamTarget),
 }
 
 fn is_stream_url(url: &str) -> bool {
@@ -173,9 +187,8 @@ impl AudioThread {
                 player.append(decoder);
                 duration
             }
-            (Loaded::Url(url), Some(client)) => {
-                let (stream, handle) = HttpSource::open(client, url)
-                    .map_err(|e| AppError::new(ErrorCode::AudiusUnavailable, format!("stream: {e}")))?;
+            (Loaded::Url(target), Some(client)) => {
+                let (stream, handle) = HttpSource::open_target(client, target).map_err(stream_error)?;
                 let len = stream.len();
                 let hint = stream.hint.clone();
                 let mut builder = Decoder::builder().with_data(stream).with_byte_len(len).with_seekable(true);
@@ -292,12 +305,12 @@ impl AudioThread {
     }
 }
 
-/// Turns an extension source key into an allowlisted stream URL at play time (EXT-01).
+/// Turns an extension source key into an allowlisted stream at play time (EXT-01, EXT-05).
 #[async_trait]
 pub trait StreamResolver: Send + Sync {
-    /// Whether the key's extension is installed and enabled.
+    /// Whether the key's extension is installed, enabled and gives streams.
     async fn available(&self, key: &str) -> bool;
-    async fn resolve(&self, key: &str) -> AppResult<String>;
+    async fn resolve(&self, key: &str) -> AppResult<StreamTarget>;
 }
 
 /// Handle to the audio thread. Cheap to share behind an `Arc`.
@@ -355,7 +368,29 @@ impl NativeEngine {
 
     /// Streams an HTTP(S) audio URL (Audius) with Range seeking.
     pub async fn load_url(&self, url: String, start_ms: u32) -> AppResult<()> {
-        self.ask(|reply| Cmd::Load { source: Loaded::Url(url), start_ms, reply }).await
+        self.load_target(StreamTarget::url(url), start_ms).await.map_err(|e| match e.code {
+            ErrorCode::UnsupportedFormat => e,
+            _ => AppError::new(ErrorCode::AudiusUnavailable, e.message),
+        })
+    }
+
+    /// Streams a target (URL plus the headers its service needs) with Range seeking.
+    pub async fn load_target(&self, target: StreamTarget, start_ms: u32) -> AppResult<()> {
+        self.ask(|reply| Cmd::Load { source: Loaded::Url(target), start_ms, reply }).await
+    }
+
+    /// Resolves an extension source and plays it; a URL refused as expired is resolved once
+    /// more (signed URLs rotate).
+    async fn load_extension(&self, resolver: &dyn StreamResolver, key: &str, start_ms: u32) -> AppResult<()> {
+        let target = resolver.resolve(key).await?;
+        match self.load_target(target, start_ms).await {
+            Err(err) if is_expired(&err) => {
+                tracing::info!(error = %err, "stream refused; resolving it again");
+                let fresh = resolver.resolve(key).await?;
+                self.load_target(fresh, start_ms).await
+            }
+            other => other,
+        }
     }
 
     /// ReplayGain for the next/current item (dB; `None` = none).
@@ -393,9 +428,9 @@ impl Engine for NativeEngine {
             let resolver = self
                 .streams
                 .get()
-                .ok_or_else(|| AppError::new(ErrorCode::ExtensionDisabled, "extensions are not set up"))?;
-            let url = resolver.resolve(&source.item_id).await?;
-            return self.load_url(url, start_ms).await;
+                .ok_or_else(|| AppError::new(ErrorCode::ExtensionDisabled, "extensions are not set up"))?
+                .clone();
+            return self.load_extension(resolver.as_ref(), &source.item_id, start_ms).await;
         }
         if is_stream_url(&source.url) {
             self.load_url(source.url.clone(), start_ms).await
@@ -534,9 +569,19 @@ mod tests {
         async fn available(&self, key: &str) -> bool {
             key.starts_with("on:")
         }
-        async fn resolve(&self, _key: &str) -> AppResult<String> {
+        async fn resolve(&self, _key: &str) -> AppResult<StreamTarget> {
             Err(AppError::new(ErrorCode::ExtensionDisabled, "fake"))
         }
+    }
+
+    #[test]
+    fn stream_errors_keep_the_status_and_expired_urls_are_retried() {
+        let refused = stream_error(StreamError { status: Some(403), message: "stream returned HTTP 403".into() });
+        assert_eq!(refused.code, ErrorCode::Upstream { status: 403 });
+        assert!(is_expired(&refused));
+        assert!(!is_expired(&stream_error(StreamError { status: Some(500), message: "x".into() })));
+        let failed = stream_error(StreamError { status: None, message: "stream has no length".into() });
+        assert_eq!(failed.code, ErrorCode::ExtensionFailed, "not the Audius message");
     }
 
     #[tokio::test]

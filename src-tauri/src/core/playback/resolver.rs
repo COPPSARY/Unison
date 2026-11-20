@@ -2,10 +2,12 @@
 //! stored sources and the "Play from" priority. Only sources merged into the same `tracks` row
 //! are ever candidates, so a fallback never plays a different song.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use sqlx::SqlitePool;
 
-use super::engine::{Candidates, PlaySource, Policy};
+use super::engine::{Candidates, PlaySource, Policy, SourceFinder};
 use crate::core::db;
 use crate::error::AppResult;
 use crate::model::SourceKind;
@@ -52,10 +54,25 @@ pub fn order(sources: Vec<StoredSource>, priority: &[SourceKind]) -> Vec<PlaySou
 
 pub struct Resolver {
     pub db: SqlitePool,
+    /// Looks for more sources when a track's own can't play (the extensions).
+    pub finder: Option<Arc<dyn SourceFinder>>,
+}
+
+impl Resolver {
+    pub fn new(db: SqlitePool) -> Self {
+        Self { db, finder: None }
+    }
 }
 
 #[async_trait]
 impl Candidates for Resolver {
+    async fn find_more(&self, track_id: &str) -> bool {
+        match &self.finder {
+            Some(finder) => finder.find_more(track_id).await,
+            None => false,
+        }
+    }
+
     async fn candidates(&self, track_id: &str) -> AppResult<Vec<PlaySource>> {
         let settings = db::settings::load(&self.db).await?;
         let sources = stored_sources(&self.db, track_id).await?;
@@ -113,7 +130,7 @@ mod tests {
         };
         let id = db::library::upsert_track(&mut conn, "extension", &input, 0).await.unwrap();
         drop(conn);
-        let resolver = Resolver { db: pool };
+        let resolver = Resolver::new(pool);
         let c = resolver.candidates(&id).await.unwrap();
         assert_eq!(c, vec![PlaySource { kind: SourceKind::Extension, item_id: "demo:t1".into(), url: "https://music.example/t1".into() }]);
         assert_eq!(resolver.policy().await, Policy::default());

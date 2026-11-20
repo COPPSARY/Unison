@@ -278,7 +278,7 @@
     "upstream": "The service had a problem ({status}). Try again in a moment.",
     "internal": "Something went wrong. Try again; if it keeps happening, restart Unison.",
     "unknown": "Something went wrong. Try again.",
-    "noPlayableSource": "This song can't play from any source here. Check that its extension is on.",
+    "noPlayableSource": "None of your extensions can stream this song. Enable an extension that plays music (for example JioSaavn) and try again.",
     "fileMissing": "The file was moved or deleted. Use Locate file to find it.",
     "unsupportedFormat": "Unison can't play this file type.",
     "drmProtected": "This file is copy-protected (DRM) and can't be played.",

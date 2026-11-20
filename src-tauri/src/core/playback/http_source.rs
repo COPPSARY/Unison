@@ -64,12 +64,12 @@ fn block_of(offset: u64) -> usize {
 }
 
 fn hint_from(content_type: Option<&str>, url: &str) -> Option<String> {
-    let from_type = content_type.and_then(|ct| match ct.split(';').next()?.trim() {
-        "audio/mpeg" | "audio/mp3" => Some("mp3"),
-        "audio/flac" | "audio/x-flac" => Some("flac"),
-        "audio/wav" | "audio/x-wav" | "audio/wave" => Some("wav"),
-        "audio/ogg" => Some("ogg"),
-        "audio/mp4" | "audio/aac" | "audio/x-m4a" => Some("m4a"),
+    let from_type = content_type.and_then(|ct| match ct.split(';').next()?.trim().to_ascii_lowercase().as_str() {
+        "audio/mpeg" | "audio/mp3" | "mp3" => Some("mp3"),
+        "audio/flac" | "audio/x-flac" | "flac" => Some("flac"),
+        "audio/wav" | "audio/x-wav" | "audio/wave" | "wav" => Some("wav"),
+        "audio/ogg" | "ogg" | "oga" => Some("ogg"),
+        "audio/mp4" | "audio/aac" | "audio/x-m4a" | "m4a" | "mp4" | "aac" => Some("m4a"),
         _ => None,
     });
     from_type.map(str::to_owned).or_else(|| {
@@ -79,38 +79,119 @@ fn hint_from(content_type: Option<&str>, url: &str) -> Option<String> {
     })
 }
 
+/// Where the audio is and how to ask for it.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct StreamTarget {
+    pub url: String,
+    /// Request headers the service needs (already allowlisted). Sent only to the URL's host.
+    pub headers: Vec<(String, String)>,
+    /// Type hint from the source: a MIME type ("audio/flac") or a file extension ("flac").
+    pub mime: Option<String>,
+    /// Total length and content type when a probe already learned them (skips a second probe).
+    pub known: Option<(u64, Option<String>)>,
+}
+
+impl StreamTarget {
+    pub fn url(url: impl Into<String>) -> Self {
+        Self { url: url.into(), ..Self::default() }
+    }
+}
+
+// Header values may hold credentials: never print them.
+impl std::fmt::Debug for StreamTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(n, _)| n.as_str()).collect();
+        f.debug_struct("StreamTarget")
+            .field("host", &url::Url::parse(&self.url).ok().and_then(|u| u.host_str().map(str::to_owned)))
+            .field("headers", &names)
+            .field("mime", &self.mime)
+            .field("known", &self.known)
+            .finish()
+    }
+}
+
+/// Why a stream didn't open. `status` is the HTTP status when the server refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamError {
+    pub status: Option<u16>,
+    pub message: String,
+}
+
+impl StreamError {
+    fn new(message: impl Into<String>) -> Self {
+        Self { status: None, message: message.into() }
+    }
+}
+
+impl std::fmt::Display for StreamError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+/// A GET with the target's headers and no compression (byte offsets must be the file's own).
+fn request(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    headers: &[(String, String)],
+    range: &str,
+) -> reqwest::blocking::RequestBuilder {
+    let mut req = client.get(url);
+    for (name, value) in headers {
+        req = req.header(name.as_str(), value.as_str());
+    }
+    req.header(reqwest::header::ACCEPT_ENCODING, "identity").header(reqwest::header::RANGE, range)
+}
+
+fn same_host(a: &str, b: &str) -> bool {
+    let host = |u: &str| url::Url::parse(u).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase));
+    host(a).is_some() && host(a) == host(b)
+}
+
+/// The probe: final URL (after redirects), total length and content type.
+fn probe(client: &reqwest::blocking::Client, target: &StreamTarget) -> Result<(String, u64, Option<String>), StreamError> {
+    let probe = request(client, &target.url, &target.headers, "bytes=0-0")
+        .send()
+        .map_err(|e| StreamError::new(format!("stream request failed: {}", e.without_url())))?;
+    let status = probe.status();
+    if !status.is_success() {
+        return Err(StreamError { status: Some(status.as_u16()), message: format!("stream returned HTTP {}", status.as_u16()) });
+    }
+    let content_type = probe
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    // 206 → total length is after the slash in Content-Range; 200 → Content-Length.
+    let len = probe
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit('/').next())
+        .and_then(|v| v.parse::<u64>().ok())
+        .or_else(|| probe.content_length())
+        .ok_or_else(|| StreamError::new("stream has no length (seeking unsupported)"))?;
+    // The probe may have been redirected (Audius → content node); keep the final URL.
+    Ok((probe.url().to_string(), len, content_type))
+}
+
 impl HttpSource {
     /// Opens `url` (following redirects) and starts downloading in the background.
-    pub fn open(client: reqwest::blocking::Client, url: &str) -> io::Result<(Self, StreamHandle)> {
-        let probe = client
-            .get(url)
-            .header(reqwest::header::RANGE, "bytes=0-0")
-            .send()
-            .map_err(|e| io::Error::other(format!("stream request failed: {}", e.without_url())))?;
-        let status = probe.status();
-        if !status.is_success() {
-            return Err(io::Error::other(format!("stream returned HTTP {}", status.as_u16())));
-        }
-        let content_type = probe
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_owned);
-        // 206 → total length is after the slash in Content-Range; 200 → Content-Length.
-        let len = probe
-            .headers()
-            .get(reqwest::header::CONTENT_RANGE)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.rsplit('/').next())
-            .and_then(|v| v.parse::<u64>().ok())
-            .or_else(|| probe.content_length())
-            .ok_or_else(|| io::Error::other("stream has no length (seeking unsupported)"))?;
+    pub fn open(client: reqwest::blocking::Client, url: &str) -> Result<(Self, StreamHandle), StreamError> {
+        Self::open_target(client, &StreamTarget::url(url))
+    }
+
+    /// Opens a target; probes it first unless its length is already known.
+    pub fn open_target(client: reqwest::blocking::Client, target: &StreamTarget) -> Result<(Self, StreamHandle), StreamError> {
+        let (final_url, len, content_type) = match &target.known {
+            Some((len, content_type)) => (target.url.clone(), *len, content_type.clone()),
+            None => probe(&client, target)?,
+        };
         if len == 0 || len > MAX_STREAM_BYTES {
-            return Err(io::Error::other(format!("stream length {len} not supported")));
+            return Err(StreamError::new(format!("stream length {len} not supported")));
         }
-        // The probe may have been redirected (Audius → content node); keep the final URL.
-        let final_url = probe.url().to_string();
-        drop(probe);
+        // Headers belong to the host the source named, not to a CDN it redirected to.
+        let headers = if same_host(&target.url, &final_url) { target.headers.clone() } else { Vec::new() };
 
         let blocks = block_of(len - 1) + 1;
         let shared = Arc::new(Shared {
@@ -127,9 +208,13 @@ impl HttpSource {
         let worker = shared.clone();
         std::thread::Builder::new()
             .name("unison-stream".into())
-            .spawn(move || download(client, final_url, worker))
-            .map_err(|e| io::Error::other(format!("spawn stream thread: {e}")))?;
-        let hint = hint_from(content_type.as_deref(), url);
+            .spawn(move || download(client, final_url, headers, worker))
+            .map_err(|e| StreamError::new(format!("spawn stream thread: {e}")))?;
+        let hint = target
+            .mime
+            .as_deref()
+            .and_then(|m| hint_from(Some(m), ""))
+            .or_else(|| hint_from(content_type.as_deref(), &target.url));
         Ok((Self { shared: shared.clone(), pos: 0, hint }, StreamHandle(shared)))
     }
 
@@ -153,7 +238,7 @@ impl Drop for HttpSource {
 
 /// Download loop: sequential ranged reads from `start`, restarting when the reader wants an
 /// offset that isn't buffered; idles at the end until asked again or closed.
-fn download(client: reqwest::blocking::Client, url: String, shared: Arc<Shared>) {
+fn download(client: reqwest::blocking::Client, url: String, headers: Vec<(String, String)>, shared: Arc<Shared>) {
     let mut start = 0u64;
     loop {
         // Find where to (re)start: the requested offset, else the first missing block from `start`.
@@ -178,14 +263,22 @@ fn download(client: reqwest::blocking::Client, url: String, shared: Arc<Shared>)
         }
 
         let range = format!("bytes={start}-");
-        let response = client.get(&url).header(reqwest::header::RANGE, range).send();
+        let response = request(&client, &url, &headers, &range).send();
         let mut response = match response {
             Ok(r) if r.status().is_success() => r,
             Ok(r) => return fail(&shared, format!("stream HTTP {}", r.status().as_u16())),
             Err(e) => return fail(&shared, format!("stream: {}", e.without_url())),
         };
-        // A server that ignores Range sends the whole file from 0.
-        let mut offset = if response.status() == reqwest::StatusCode::PARTIAL_CONTENT { start } else { 0 };
+        // A server that ignores Range sends the whole file from 0: skip to `start`.
+        if response.status() != reqwest::StatusCode::PARTIAL_CONTENT && start > 0 {
+            let skipped = io::copy(&mut (&mut response).take(start), &mut io::sink());
+            match skipped {
+                Ok(n) if n == start => {}
+                Ok(_) => return fail(&shared, "stream ended early".into()),
+                Err(e) => return fail(&shared, format!("stream read: {e}")),
+            }
+        }
+        let mut offset = start;
         let mut chunk = vec![0u8; 16 * 1024];
         loop {
             let n = match response.read(&mut chunk) {
@@ -348,6 +441,60 @@ pub(crate) mod tests {
             }
         });
         format!("http://{addr}/audio.wav")
+    }
+
+    /// A server that ignores Range (always 200 with the whole file) and refuses requests
+    /// without `referer: ok` (403) or that don't ask for an uncompressed body.
+    fn serve_whole_file(body: Vec<u8>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let body = Arc::new(body);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let body = body.clone();
+                std::thread::spawn(move || {
+                    let mut req = [0u8; 2048];
+                    let n = stream.read(&mut req).unwrap_or(0);
+                    let head = String::from_utf8_lossy(&req[..n]).to_ascii_lowercase();
+                    if !head.contains("referer: ok") || !head.contains("accept-encoding: identity") {
+                        let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        return;
+                    }
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    let _ = stream.write_all(header.as_bytes());
+                    let _ = stream.write_all(&body);
+                });
+            }
+        });
+        format!("http://{addr}/stream")
+    }
+
+    #[test]
+    fn sends_headers_and_skips_ahead_when_range_is_ignored() {
+        let body = data(400_000);
+        let url = serve_whole_file(body.clone());
+        let refused = HttpSource::open(client(), &url).err().unwrap();
+        assert_eq!(refused.status, Some(403), "the status is kept for a re-resolve");
+
+        let target = StreamTarget {
+            url: url.clone(),
+            headers: vec![("referer".into(), "ok".into())],
+            mime: Some("flac".into()),
+            known: None,
+        };
+        let (mut src, handle) = HttpSource::open_target(client(), &target).unwrap();
+        assert_eq!(src.len(), 400_000);
+        assert_eq!(src.hint.as_deref(), Some("flac"), "the source's type wins over the server's");
+        src.seek(SeekFrom::Start(350_000)).unwrap();
+        let mut buf = [0u8; 100];
+        src.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf[..], &body[350_000..350_100]);
+        assert!(handle.error().is_none());
+        assert!(!format!("{target:?}").contains("\"ok\""), "header values are never printed");
     }
 
     pub fn client() -> reqwest::blocking::Client {

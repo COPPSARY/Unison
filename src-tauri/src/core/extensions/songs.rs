@@ -3,12 +3,19 @@
 //! qualities), playing from a chosen source, and liking.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use tokio::task::JoinSet;
 
+use super::manifest::MappedItem;
 use super::script::{effective_quality, QualityOption};
-use super::{split_key, ExtensionManager, ExtensionResults};
+use super::{
+    capabilities, search_one, split_key, Capability, ExtensionManager, ExtensionResults, SCRIPT_TIMEOUT, SEARCH_TIMEOUT,
+};
 use crate::core::db;
 use crate::core::db::extensions::{Installed, Spec, PROVIDER};
 use crate::core::db::library::TrackInput;
@@ -16,6 +23,9 @@ use crate::core::matching::matcher::{merges, score, MatchKey};
 use crate::core::now_unix;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::{StreamQuality, Track};
+
+/// How long "no extension that streams has this song" is remembered.
+pub const MISS_TTL: Duration = Duration::from_secs(10 * 60);
 
 /// One place a song can play from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -85,13 +95,13 @@ struct SourceInfo {
     quality: Option<String>,
 }
 
-fn source_info(i: &Installed, tier: StreamQuality) -> SourceInfo {
+fn source_info(i: &Installed, tier: StreamQuality, download_only: bool) -> SourceInfo {
     match &i.spec {
         Spec::Declarative(m) => SourceInfo { name: m.name.clone(), icon: None, can_play: true, qualities: Vec::new(), quality: None },
         Spec::Script { manifest, .. } => SourceInfo {
             name: manifest.name.clone(),
             icon: manifest.icon.clone(),
-            can_play: manifest.can_stream(),
+            can_play: manifest.can_stream() && !download_only,
             qualities: manifest.qualities.clone(),
             // What Unison would stream now: a pick, else the Settings tier, else its default.
             quality: effective_quality(manifest, i.quality.as_deref(), tier),
@@ -173,7 +183,7 @@ impl ExtensionManager {
             .await?
             .iter()
             .filter(|i| i.enabled)
-            .map(|i| (i.spec.id().to_owned(), source_info(i, tier)))
+            .map(|i| (i.spec.id().to_owned(), source_info(i, tier, self.is_download_only(i.spec.id()))))
             .collect())
     }
 
@@ -318,6 +328,151 @@ impl ExtensionManager {
         let mut conn = self.db.acquire().await?;
         db::library::prefer_source(&mut conn, PROVIDER, source_key, now_unix()).await?;
         Ok(id)
+    }
+
+    /// When none of a track's sources can stream (metadata-only extensions), searches the
+    /// extensions that can both search and stream for the same song and attaches the first
+    /// strict match (equal ISRC, else the §8.2 merge rule) to the same track. Never attaches
+    /// a different song. Returns whether a source was added; a miss is remembered for
+    /// [`MISS_TTL`] so repeated presses don't search again.
+    pub async fn find_stream_source(&self, track_id: &str) -> AppResult<bool> {
+        if self.misses.lock().ok().and_then(|m| m.get(track_id).copied()).is_some_and(|at| at.elapsed() < MISS_TTL) {
+            return Ok(false);
+        }
+        let row: Option<(String, String, Option<i64>, Option<String>)> =
+            sqlx::query_as("SELECT title, artists_json, duration_ms, isrc FROM tracks WHERE id = ?1")
+                .bind(track_id)
+                .fetch_optional(&self.db)
+                .await?;
+        let Some((title, artists_json, duration, isrc)) = row else { return Ok(false) };
+        let artists: Vec<String> = serde_json::from_str(&artists_json).unwrap_or_default();
+        let duration = duration.and_then(|d| u32::try_from(d).ok());
+        let have: Vec<String> =
+            sqlx::query_scalar("SELECT item_id FROM track_sources WHERE track_id = ?1 AND provider = ?2")
+                .bind(track_id)
+                .bind(PROVIDER)
+                .fetch_all(&self.db)
+                .await?;
+        let have_ext: Vec<&str> = have.iter().filter_map(|k| split_key(k).map(|(e, _)| e)).collect();
+        let streamers: Vec<Spec> = db::extensions::list(&self.db)
+            .await?
+            .into_iter()
+            .filter(|i| i.enabled && !have_ext.contains(&i.spec.id()))
+            .filter(|i| capabilities(&i.spec).contains(&Capability::Search) && self.streams(&i.spec))
+            .map(|i| i.spec)
+            .collect();
+        if streamers.is_empty() {
+            tracing::info!(track = %track_id, "no extension that streams is enabled");
+            self.remember_miss(track_id);
+            return Ok(false);
+        }
+
+        let query = match artists.first() {
+            Some(artist) => format!("{artist} {title}"),
+            None => title.clone(),
+        };
+        let wanted = MatchKey::new(&title, &artists, duration, isrc.as_deref());
+        let mut set = JoinSet::new();
+        for (order, spec) in streamers.into_iter().enumerate() {
+            let (http, art, q) = (self.http.clone(), self.art.clone(), query.clone());
+            let (db, secrets) = (self.db.clone(), self.secrets.clone());
+            set.spawn(async move {
+                let limit = match &spec {
+                    Spec::Declarative(_) => SEARCH_TIMEOUT,
+                    Spec::Script { .. } => SCRIPT_TIMEOUT + Duration::from_secs(5),
+                };
+                let cancel = Arc::new(AtomicBool::new(false));
+                let found = tokio::time::timeout(limit, search_one(&http, &art, &db, &secrets, &spec, &q, cancel)).await;
+                (order, spec.id().to_owned(), found)
+            });
+        }
+        let mut hits: Vec<(usize, MappedItem, Option<String>)> = Vec::new();
+        while let Some(joined) = set.join_next().await {
+            let Ok((order, ext, found)) = joined else { continue };
+            let items = match found {
+                Ok(Ok(items)) => items,
+                Ok(Err(e)) => {
+                    tracing::warn!(extension = %ext, error = %e, "stream source search failed");
+                    continue;
+                }
+                Err(_) => {
+                    tracing::warn!(extension = %ext, "stream source search timed out");
+                    continue;
+                }
+            };
+            let hit = items.into_iter().find(|(item, _)| {
+                let t = &item.track;
+                same_song(&wanted, &MatchKey::new(&t.title, &t.artists, t.duration_ms, t.isrc.as_deref()))
+            });
+            if let Some((item, art)) = hit {
+                hits.push((order, item, art));
+            }
+        }
+        if hits.is_empty() {
+            tracing::info!(track = %track_id, query = %query, "no extension that streams has this song");
+            self.remember_miss(track_id);
+            return Ok(false);
+        }
+        // Every match is attached (in the user's extension order), so one that turns out to be
+        // download-only can't hide another that streams; the player tries them in turn.
+        hits.sort_by_key(|(order, _, _)| *order);
+        let now = now_unix();
+        let mut added: Vec<TrackInput> = Vec::new();
+        let mut tx = self.db.begin().await?;
+        for (_, item, art) in &hits {
+            let mut input = item.track.clone();
+            input.artwork = art.clone();
+            db::library::attach_source(&mut tx, track_id, PROVIDER, &input, now).await?;
+            added.push(input);
+        }
+        tx.commit().await?;
+        self.remember(&hits.into_iter().map(|(_, item, art)| (item, art)).collect::<Vec<_>>());
+        // A song already open in Search or on its page shows the new sources too.
+        let infos = self.source_infos().await?;
+        let new_sources: Vec<SongSource> = added.iter().filter_map(|i| song_source(&i.item_id, &i.url, &infos)).collect();
+        if let Ok(mut songs) = self.songs.lock() {
+            // The map holds each song once per source key; update each song once.
+            let updated: HashMap<String, Song> = songs
+                .values()
+                .filter(|s| s.sources.iter().any(|x| have.contains(&x.key)))
+                .map(|s| (s.key.clone(), s.clone()))
+                .collect();
+            for mut song in updated.into_values() {
+                for source in &new_sources {
+                    if !song.sources.iter().any(|x| x.key == source.key) {
+                        song.sources.push(source.clone());
+                    }
+                }
+                for s in &song.sources {
+                    songs.insert(s.key.clone(), song.clone());
+                }
+            }
+        }
+        if let Ok(mut misses) = self.misses.lock() {
+            misses.remove(track_id);
+        }
+        let keys: Vec<&str> = added.iter().map(|i| i.item_id.as_str()).collect();
+        tracing::info!(track = %track_id, sources = ?keys, "found stream sources for the song");
+        Ok(true)
+    }
+
+    /// Learnt at play time: the extension's getDownloadUrl is a stub (answers null).
+    pub(super) fn is_download_only(&self, ext_id: &str) -> bool {
+        self.download_only.lock().is_ok_and(|s| s.contains(ext_id))
+    }
+
+    /// Gives streams: declares getDownloadUrl (or is declarative) and hasn't answered null.
+    pub(super) fn streams(&self, spec: &Spec) -> bool {
+        capabilities(spec).contains(&Capability::Play) && !self.is_download_only(spec.id())
+    }
+
+    fn remember_miss(&self, track_id: &str) {
+        if let Ok(mut misses) = self.misses.lock() {
+            if misses.len() > 2000 {
+                misses.retain(|_, at| at.elapsed() < MISS_TTL);
+            }
+            misses.insert(track_id.to_owned(), std::time::Instant::now());
+        }
     }
 
     /// Likes or unlikes a song; Liked songs, Albums and Artists follow.

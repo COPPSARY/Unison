@@ -105,4 +105,16 @@ pub trait Candidates: Send + Sync {
     async fn policy(&self) -> Policy {
         Policy::default()
     }
+
+    /// Called when none of a track's sources could play: looks for the same song in other
+    /// sources and attaches what it finds to the track (EXT-05). True when it added any.
+    async fn find_more(&self, _track_id: &str) -> bool {
+        false
+    }
+}
+
+/// Finds more sources of a track (the extensions, EXT-05).
+#[async_trait]
+pub trait SourceFinder: Send + Sync {
+    async fn find_more(&self, track_id: &str) -> bool;
 }
