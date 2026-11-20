@@ -92,6 +92,9 @@ pub struct PlayerService {
     player: Mutex<Player>,
     engines: Vec<Arc<dyn Engine>>,
     now_playing: Mutex<Option<(String, NowPlaying)>>,
+    /// Last snapshot the UI was told, so "loading" can be announced while a load holds the
+    /// player's lock.
+    last_snapshot: std::sync::Mutex<Option<PlayerSnapshot>>,
 }
 
 async fn now_playing(pool: &SqlitePool, track_id: &str) -> Option<NowPlaying> {
@@ -119,7 +122,13 @@ impl PlayerService {
         let resolver = Arc::new(Resolver { db: db.clone() });
         // Volume applies when the first item loads.
         let player = Player::new(engines.clone(), resolver, Queue::default()).with_volume(volume);
-        Self { db, player: Mutex::new(player), engines, now_playing: Mutex::new(None) }
+        Self {
+            db,
+            player: Mutex::new(player),
+            engines,
+            now_playing: Mutex::new(None),
+            last_snapshot: std::sync::Mutex::new(None),
+        }
     }
 
     async fn persist(&self, log: Vec<LogEntry>) {
@@ -143,25 +152,31 @@ impl PlayerService {
         }
     }
 
+    /// Title, artists and artwork of a track (cached for the current one).
+    async fn track_info(&self, id: &str) -> Option<NowPlaying> {
+        let mut cache = self.now_playing.lock().await;
+        match cache.as_ref() {
+            Some((cached, np)) if cached == id => Some(np.clone()),
+            _ => {
+                let np = now_playing(&self.db, id).await;
+                *cache = np.clone().map(|n| (id.to_owned(), n));
+                np
+            }
+        }
+    }
+
     /// Current state for the UI (also the `player_state` command).
     pub async fn state(&self) -> AppResult<PlayerStateEvent> {
         let player = self.player.lock().await;
         let snapshot = player.snapshot();
         let engine = player.engine_state().await.unwrap_or(None);
         drop(player);
+        if let Ok(mut last) = self.last_snapshot.lock() {
+            *last = Some(snapshot.clone());
+        }
         let track = match &snapshot.track_id {
             None => None,
-            Some(id) => {
-                let mut cache = self.now_playing.lock().await;
-                match cache.as_ref() {
-                    Some((cached, np)) if cached == id => Some(np.clone()),
-                    _ => {
-                        let np = now_playing(&self.db, id).await;
-                        *cache = np.clone().map(|n| (id.clone(), n));
-                        np
-                    }
-                }
-            }
+            Some(id) => self.track_info(id).await,
         };
         let active = matches!(snapshot.status, PlayerStatus::Playing | PlayerStatus::Paused);
         Ok(PlayerStateEvent {
@@ -198,6 +213,50 @@ impl PlayerService {
 
     pub async fn play(&self, track_ids: Vec<String>, start: usize, force: Option<SourceKind>) -> AppResult<()> {
         self.player.lock().await.play(track_ids, start, force).await
+    }
+
+    /// Tells the UI a track is loading right away (title, artwork, "loading"), without waiting
+    /// for the player: a load can take many seconds and holds the player's lock throughout.
+    async fn announce_loading<R: Runtime>(&self, app: &AppHandle<R>, track_id: &str) {
+        let base = self.last_snapshot.lock().ok().and_then(|l| l.clone());
+        let Some(base) = base else { return };
+        let snapshot = PlayerSnapshot {
+            status: PlayerStatus::Loading,
+            track_id: Some(track_id.to_owned()),
+            source: None,
+            ..base
+        };
+        let event = PlayerStateEvent {
+            snapshot,
+            track: self.track_info(track_id).await,
+            position_ms: 0,
+            duration_ms: None,
+            can_seek: false,
+        };
+        if let Err(err) = event.emit(app) {
+            tracing::warn!(error = %err, "emit loading state failed");
+        }
+    }
+
+    /// Plays like [`play`](Self::play), showing the track as loading at once and the result
+    /// (playing, or the error) when the load ends.
+    pub async fn play_announced<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        track_ids: Vec<String>,
+        start: usize,
+        force: Option<SourceKind>,
+    ) -> AppResult<()> {
+        if let Some(id) = track_ids.get(start) {
+            // The first play after startup has no snapshot yet: read it now (no load is running).
+            if self.last_snapshot.lock().is_ok_and(|l| l.is_none()) {
+                let _ = self.state().await;
+            }
+            self.announce_loading(app, id).await;
+        }
+        let result = self.play(track_ids, start, force).await;
+        self.emit_state(app).await;
+        result
     }
 
     pub async fn control(&self, action: PlayerAction) -> AppResult<()> {

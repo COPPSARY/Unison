@@ -43,6 +43,23 @@ fn known_sources<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<SourceKin
     Ok(raw.iter().filter_map(|v| v.as_str()).filter_map(SourceKind::parse).collect())
 }
 
+/// The stream quality Unison asks extensions for. Extensions name their qualities differently
+/// (`LOSSLESS`, `aac_160`, `best`…), so this is a tier that is matched to each extension's own
+/// options; an extension with nothing in the tier uses its own default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum StreamQuality {
+    /// The highest the extension offers.
+    Best,
+    /// FLAC / lossless / hi-res.
+    Lossless,
+    /// M4A / AAC / Opus / MP3 (the default).
+    #[default]
+    High,
+    /// A small, data-saving stream.
+    Low,
+}
+
 /// Volume leveling (NativeEngine).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +80,8 @@ pub struct PlayerSettings {
     pub source_priority: Vec<SourceKind>,
     pub auto_fallback: bool,
     pub fallback_on_error_midtrack: bool,
+    /// Preferred stream quality for extensions (Settings → Playback).
+    pub stream_quality: StreamQuality,
     /// NativeEngine output device; `None` = system default.
     pub output_device: Option<String>,
     pub gapless: bool,
@@ -79,6 +98,7 @@ impl Default for PlayerSettings {
             source_priority: SourceKind::DEFAULT_PRIORITY.to_vec(),
             auto_fallback: true,
             fallback_on_error_midtrack: true,
+            stream_quality: StreamQuality::High,
             output_device: None,
             gapless: true,
             crossfade_ms: 0,

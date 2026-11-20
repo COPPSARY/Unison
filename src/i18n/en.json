@@ -51,7 +51,8 @@
     "repeatOne": "Repeat one",
     "repeatAll": "Repeat all",
     "repeatOff": "Repeat off",
-    "mute": "Mute"
+    "mute": "Mute",
+    "loading": "Loading…"
   },
   "track": {
     "addToPlaylist": "Add to playlist",
@@ -289,7 +290,7 @@
     "extensionDisabled": "This extension is off or removed. Turn it on in Settings → Extensions.",
     "extensionFailed": "The extension's service sent something Unison couldn't use. Try again later.",
     "extensionRegistryInvalid": "That registry.json isn't valid or lists no extensions. Ask its author to fix it.",
-    "extensionUnsupported": "Can't do that with this extension: it isn't an installable link, or it can't play in Unison."
+    "extensionUnsupported": "This extension can't play songs in Unison: it only gives song info or downloads files. Pick another source on the song's page."
   },
   "settings": {
     "about": "About",
@@ -319,6 +320,14 @@
       "title": "Output",
       "systemDefault": "System default",
       "test": "Test sound"
+    },
+    "streamQuality": {
+      "title": "Stream quality",
+      "hint": "Used for extensions that offer several qualities. If one has nothing in this tier, it uses its own default.",
+      "best": "Best available",
+      "lossless": "Lossless (FLAC)",
+      "high": "High (M4A / AAC / Opus)",
+      "low": "Low (saves data)"
     }
   },
   "library": {

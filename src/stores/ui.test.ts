@@ -22,6 +22,7 @@ const saved: Settings = {
     sourcePriority: ["extension", "local", "audius"],
     autoFallback: true,
     fallbackOnErrorMidtrack: true,
+    streamQuality: "high",
     outputDevice: null,
     gapless: true,
     crossfadeMs: 3000,

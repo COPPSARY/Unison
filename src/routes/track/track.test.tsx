@@ -69,7 +69,11 @@ describe("Track page", () => {
     await userEvent.click(within(sources).getByRole("radio", { name: format(t.playFrom, { name: "Store B" }) }));
     expect(within(sources).getByRole("combobox", { name: format(t.quality, { name: "Store B" }) })).toHaveTextContent("Lossless");
     await userEvent.click(within(screen.getByRole("main")).getByRole("button", { name: t.play }));
-    await waitFor(() => expect(cmd.extensionPlaySong).toHaveBeenCalledWith("a:1", "b:9", "LOSSLESS"));
+    await waitFor(() => expect(cmd.extensionPlaySong).toHaveBeenCalledWith("a:1", "b:9", null));
+    await userEvent.click(within(sources).getByRole("combobox", { name: format(t.quality, { name: "Store B" }) }));
+    await userEvent.click(await screen.findByRole("option", { name: "Hi-Res" }));
+    await userEvent.click(within(screen.getByRole("main")).getByRole("button", { name: t.play }));
+    await waitFor(() => expect(cmd.extensionPlaySong).toHaveBeenLastCalledWith("a:1", "b:9", "HI_RES"));
   });
 
   it("likes the song", async () => {

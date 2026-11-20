@@ -14,6 +14,7 @@ use url::Url;
 use super::manifest::{valid_host, valid_id, MappedItem, MAX_ITEMS, MAX_MANIFEST_BYTES};
 use crate::core::db::library::TrackInput;
 use crate::error::{AppError, AppResult, ErrorCode};
+use crate::model::StreamQuality;
 
 /// Largest index.js accepted.
 pub const MAX_SCRIPT_BYTES: usize = 8 * 1024 * 1024;
@@ -66,6 +67,55 @@ pub struct QualityOption {
     pub id: String,
     pub label: String,
     pub description: Option<String>,
+}
+
+fn has_any(text: &str, words: &[&str]) -> bool {
+    words.iter().any(|w| text.contains(w))
+}
+
+impl QualityOption {
+    fn text(&self) -> String {
+        format!("{} {}", self.id, self.label).to_ascii_lowercase()
+    }
+
+    fn is_lossless(&self) -> bool {
+        has_any(&self.text(), &["lossless", "flac", "hi_res", "hi-res", "hires", "24-bit", "24 bit", "alac"])
+    }
+
+    fn is_best(&self) -> bool {
+        has_any(&self.text(), &["best", "max"])
+    }
+
+    fn is_low(&self) -> bool {
+        has_any(&self.text(), &["low", "saver", "64k", "96k", "128"])
+    }
+
+    /// M4A-family (compressed) streams.
+    fn is_high(&self) -> bool {
+        !self.is_lossless() && !self.is_low() && has_any(&self.text(), &["aac", "m4a", "opus", "mp3", "high", "256", "320", "160"])
+    }
+}
+
+/// The option of `options` that fits `tier`, or `None` when the extension has nothing there.
+pub fn match_quality(options: &[QualityOption], tier: StreamQuality) -> Option<String> {
+    let first = |f: &dyn Fn(&QualityOption) -> bool| options.iter().find(|o| f(o)).map(|o| o.id.clone());
+    match tier {
+        StreamQuality::Best => first(&|o| o.is_best()).or_else(|| first(&|o| o.is_lossless())).or_else(|| options.first().map(|o| o.id.clone())),
+        StreamQuality::Lossless => first(&|o| o.is_lossless()),
+        StreamQuality::High => first(&|o| o.is_high()),
+        StreamQuality::Low => first(&|o| o.is_low()),
+    }
+}
+
+/// The quality to stream for an extension: the one picked for this play, else the tier from
+/// Settings when the extension has an option for it, else the extension's own default (its
+/// first option). `None` when it lists no qualities.
+pub fn effective_quality(manifest: &ScriptManifest, picked: Option<&str>, tier: StreamQuality) -> Option<String> {
+    picked
+        .filter(|p| manifest.qualities.iter().any(|o| o.id == *p))
+        .map(str::to_owned)
+        .or_else(|| match_quality(&manifest.qualities, tier))
+        .or_else(|| manifest.qualities.first().map(|o| o.id.clone()))
 }
 
 /// A manifest `name` → an id Unison accepts (`a–z 0–9 -`, 3–40 characters).
@@ -304,6 +354,11 @@ pub fn map_search(ext_id: &str, body: &Value) -> AppResult<Vec<MappedItem>> {
 
 /// Reads the URL out of a `getDownloadUrl` answer (`{ success, url }` or a bare string).
 pub fn stream_url(body: &Value) -> AppResult<Url> {
+    // Some extensions register getDownloadUrl only as a stub (`return null`): they download
+    // files and never give a stream.
+    if body.is_null() {
+        return Err(AppError::new(ErrorCode::ExtensionUnsupported, "extension gives no stream (it only downloads)"));
+    }
     if body.get("success").and_then(Value::as_bool) == Some(false) {
         let why = body.get("error").and_then(Value::as_str).unwrap_or("extension found no stream");
         return Err(AppError::new(ErrorCode::ExtensionFailed, why.chars().take(300).collect::<String>()));
@@ -355,6 +410,40 @@ pub(crate) mod tests {
         assert_eq!(ScriptManifest::parse(b"[]").unwrap_err().code, ErrorCode::ExtensionInvalid);
     }
 
+    fn options(list: &[(&str, &str)]) -> Vec<QualityOption> {
+        list.iter().map(|(id, label)| QualityOption { id: (*id).into(), label: (*label).into(), description: None }).collect()
+    }
+
+    #[test]
+    fn maps_a_quality_tier_onto_each_extensions_own_options() {
+        let tidal = options(&[("DOLBY_ATMOS", "Dolby Atmos"), ("HI_RES_LOSSLESS", "HiRes FLAC"), ("LOSSLESS", "Lossless"), ("HIGH", "High"), ("LOW", "Low")]);
+        let amazon = options(&[("best", "FLAC Best Available"), ("opus", "Opus 320kbps"), ("eac3", "Dolby Digital Plus")]);
+        let soundcloud = options(&[("aac_160", "AAC up to 160kbps")]);
+        let qobuz = options(&[("HI_RES_LOSSLESS", "24-Bit Max"), ("HI_RES", "24-Bit"), ("LOSSLESS", "Lossless")]);
+        let high = |o: &[QualityOption]| match_quality(o, StreamQuality::High);
+        assert_eq!(high(&tidal).as_deref(), Some("HIGH"));
+        assert_eq!(high(&amazon).as_deref(), Some("opus"));
+        assert_eq!(high(&soundcloud).as_deref(), Some("aac_160"));
+        assert_eq!(high(&qobuz), None, "nothing compressed: the extension's own default applies");
+        assert_eq!(match_quality(&tidal, StreamQuality::Lossless).as_deref(), Some("HI_RES_LOSSLESS"));
+        assert_eq!(match_quality(&soundcloud, StreamQuality::Lossless), None);
+        assert_eq!(match_quality(&tidal, StreamQuality::Low).as_deref(), Some("LOW"));
+        assert_eq!(match_quality(&amazon, StreamQuality::Best).as_deref(), Some("best"));
+        assert_eq!(match_quality(&qobuz, StreamQuality::Best).as_deref(), Some("HI_RES_LOSSLESS"));
+    }
+
+    #[test]
+    fn effective_quality_prefers_the_pick_then_the_setting_then_the_default() {
+        let mut m = ScriptManifest::parse(manifest_json("api.example.org").to_string().as_bytes()).unwrap();
+        m.qualities = options(&[("LOSSLESS", "Lossless"), ("HIGH", "High")]);
+        assert_eq!(effective_quality(&m, Some("LOSSLESS"), StreamQuality::High).as_deref(), Some("LOSSLESS"), "a pick wins");
+        assert_eq!(effective_quality(&m, Some("8K"), StreamQuality::High).as_deref(), Some("HIGH"), "an unknown pick is ignored");
+        assert_eq!(effective_quality(&m, None, StreamQuality::High).as_deref(), Some("HIGH"));
+        assert_eq!(effective_quality(&m, None, StreamQuality::Low).as_deref(), Some("LOSSLESS"), "no match: the extension's default");
+        m.qualities.clear();
+        assert_eq!(effective_quality(&m, None, StreamQuality::High), None);
+    }
+
     #[test]
     fn maps_track_objects() {
         let body = json!([
@@ -386,6 +475,7 @@ pub(crate) mod tests {
             "not found"
         );
         assert!(stream_url(&json!({ "success": true })).is_err());
+        assert_eq!(stream_url(&Value::Null).unwrap_err().code, ErrorCode::ExtensionUnsupported, "download-only stub");
     }
 
     #[test]

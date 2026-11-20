@@ -503,6 +503,8 @@ export type PlayerSettings_Deserialize = {
 	sourcePriority?: SourceKind[],
 	autoFallback?: boolean,
 	fallbackOnErrorMidtrack?: boolean,
+	/**  Preferred stream quality for extensions (Settings → Playback). */
+	streamQuality?: StreamQuality,
 	/**  NativeEngine output device; `None` = system default. */
 	outputDevice?: string | null,
 	gapless?: boolean,
@@ -517,6 +519,8 @@ export type PlayerSettings_Serialize = {
 	sourcePriority: SourceKind[],
 	autoFallback: boolean,
 	fallbackOnErrorMidtrack: boolean,
+	/**  Preferred stream quality for extensions (Settings → Playback). */
+	streamQuality: StreamQuality,
 	/**  NativeEngine output device; `None` = system default. */
 	outputDevice: string | null,
 	gapless: boolean,
@@ -867,6 +871,21 @@ export type SourceStatus_Serialize = {
 	canPlay: boolean,
 	reason: UnavailableReason | null,
 };
+
+/**
+ *  The stream quality Unison asks extensions for. Extensions name their qualities differently
+ *  (`LOSSLESS`, `aac_160`, `best`…), so this is a tier that is matched to each extension's own
+ *  options; an extension with nothing in the tier uses its own default.
+ */
+export type StreamQuality = 
+/**  The highest the extension offers. */
+"best" | 
+/**  FLAC / lossless / hi-res. */
+"lossless" | 
+/**  M4A / AAC / Opus / MP3 (the default). */
+"high" | 
+/**  A small, data-saving stream. */
+"low";
 
 export type Theme = "dark" | "light";
 

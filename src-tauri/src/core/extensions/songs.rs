@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::script::QualityOption;
+use super::script::{effective_quality, QualityOption};
 use super::{split_key, ExtensionManager, ExtensionResults};
 use crate::core::db;
 use crate::core::db::extensions::{Installed, Spec, PROVIDER};
@@ -15,7 +15,7 @@ use crate::core::db::library::TrackInput;
 use crate::core::matching::matcher::{merges, score, MatchKey};
 use crate::core::now_unix;
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::model::Track;
+use crate::model::{StreamQuality, Track};
 
 /// One place a song can play from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -85,7 +85,7 @@ struct SourceInfo {
     quality: Option<String>,
 }
 
-fn source_info(i: &Installed) -> SourceInfo {
+fn source_info(i: &Installed, tier: StreamQuality) -> SourceInfo {
     match &i.spec {
         Spec::Declarative(m) => SourceInfo { name: m.name.clone(), icon: None, can_play: true, qualities: Vec::new(), quality: None },
         Spec::Script { manifest, .. } => SourceInfo {
@@ -93,7 +93,8 @@ fn source_info(i: &Installed) -> SourceInfo {
             icon: manifest.icon.clone(),
             can_play: manifest.can_stream(),
             qualities: manifest.qualities.clone(),
-            quality: i.quality.clone().filter(|q| manifest.qualities.iter().any(|o| &o.id == q)).or_else(|| manifest.quality.clone()),
+            // What Unison would stream now: a pick, else the Settings tier, else its default.
+            quality: effective_quality(manifest, i.quality.as_deref(), tier),
         },
     }
 }
@@ -167,11 +168,12 @@ type StoredRow = (String, String, String, Option<String>, Option<i64>, Option<St
 
 impl ExtensionManager {
     async fn source_infos(&self) -> AppResult<HashMap<String, SourceInfo>> {
+        let tier = db::settings::load(&self.db).await?.player.stream_quality;
         Ok(db::extensions::list(&self.db)
             .await?
             .iter()
             .filter(|i| i.enabled)
-            .map(|i| (i.spec.id().to_owned(), source_info(i)))
+            .map(|i| (i.spec.id().to_owned(), source_info(i, tier)))
             .collect())
     }
 
@@ -302,16 +304,17 @@ impl ExtensionManager {
     /// Saves the song, makes `source_key` play first (with `quality` for its extension when
     /// given) and returns the library track id to play.
     pub async fn prepare_play(&self, key: &str, source_key: &str, quality: Option<&str>) -> AppResult<String> {
+        tracing::info!(song = %key, source = %source_key, quality = ?quality, "play requested");
         let id = self.save_song(key).await?;
         let (ext, _) = split_key(source_key).ok_or_else(|| AppError::new(ErrorCode::ExtensionFailed, "bad source key"))?;
-        if let Some(q) = quality {
-            let installed = db::extensions::get(&self.db, ext).await?.ok_or_else(|| AppError::not_found("extension not installed"))?;
-            let known = matches!(&installed.spec, Spec::Script { manifest, .. } if manifest.qualities.iter().any(|o| o.id == q));
-            if !known {
-                return Err(AppError::new(ErrorCode::ExtensionInvalid, "the extension doesn't offer that quality"));
-            }
-            db::extensions::set_quality(&self.db, ext, Some(q)).await?;
+        // A pick applies to this play only; without one the Settings quality (or the
+        // extension's default) is used. A pick the extension doesn't offer is ignored.
+        let installed = db::extensions::get(&self.db, ext).await?.ok_or_else(|| AppError::not_found("extension not installed"))?;
+        let pick = quality.filter(|q| matches!(&installed.spec, Spec::Script { manifest, .. } if manifest.qualities.iter().any(|o| o.id == *q)));
+        if quality.is_some() && pick.is_none() {
+            tracing::info!(extension = %ext, quality = ?quality, "quality not offered; using the default");
         }
+        db::extensions::set_quality(&self.db, ext, pick).await?;
         let mut conn = self.db.acquire().await?;
         db::library::prefer_source(&mut conn, PROVIDER, source_key, now_unix()).await?;
         Ok(id)

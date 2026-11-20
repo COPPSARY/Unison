@@ -94,7 +94,8 @@ function SongPage({ detail }: { detail: SongDetail }) {
 
   const play = () => {
     if (!chosen) return;
-    void playSong(song, chosen.key, qualityOf(chosen)).then(() =>
+    // Only a quality the user picked is sent; otherwise the extension's own default applies.
+    void playSong(song, chosen.key, qualities[chosen.key] ?? null).then(() =>
       qc.invalidateQueries({ queryKey: ["song", song.key] }),
     );
   };

@@ -112,10 +112,12 @@ pub async fn extension_play_song(
     source_key: String,
     quality: Option<String>,
 ) -> AppResult<()> {
-    let id = state.extensions.prepare_play(&key, &source_key, quality.as_deref()).await?;
-    let result = state.player.play(vec![id], 0, None).await;
-    state.player.emit_state(&app).await;
-    result
+    let id = state.extensions.prepare_play(&key, &source_key, quality.as_deref()).await.inspect_err(|e| {
+        tracing::warn!(error = %e, "couldn't prepare the song for playback");
+    })?;
+    state.player.play_announced(&app, vec![id], 0, None).await.inspect_err(|e| {
+        tracing::warn!(error = %e, "song didn't play");
+    })
 }
 
 /// Likes or unlikes a song. Returns the new state.

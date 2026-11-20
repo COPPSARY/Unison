@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 pub use crate::model_player::{
-    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, WatchedFolder,
+    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, StreamQuality, WatchedFolder,
 };
 
 /// Build and schema information shown in Settings → About.

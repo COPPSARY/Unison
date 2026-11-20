@@ -62,9 +62,7 @@ pub async fn player_play(
     force_source: Option<SourceKind>,
 ) -> AppResult<()> {
     let start = usize::try_from(start_index).unwrap_or(0);
-    let result = state.player.play(track_ids, start, force_source).await;
-    state.player.emit_state(&app).await;
-    result
+    state.player.play_announced(&app, track_ids, start, force_source).await
 }
 
 /// Transport controls (pause, resume, next, previous, seek, volume, shuffle, repeat).

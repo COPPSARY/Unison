@@ -85,6 +85,23 @@ describe("Settings → Playback → Output", () => {
   });
 });
 
+describe("Settings → Playback → Stream quality", () => {
+  it("defaults to High and saves another tier", async () => {
+    cmd.settingsGet.mockResolvedValue(defaultsForTest());
+    cmd.settingsSet.mockImplementation((v: unknown) => Promise.resolve(v));
+    renderRoute("/settings");
+    const select = await screen.findByRole("combobox", { name: strings.settings.streamQuality.title });
+    expect(select).toHaveTextContent(strings.settings.streamQuality.high);
+    await userEvent.click(select);
+    await userEvent.click(await screen.findByRole("option", { name: strings.settings.streamQuality.lossless }));
+    await waitFor(() =>
+      expect(cmd.settingsSet).toHaveBeenCalledWith(
+        expect.objectContaining({ player: expect.objectContaining({ streamQuality: "lossless" }) }),
+      ),
+    );
+  });
+});
+
 describe("Settings → Local files", () => {
   it("turns copy-on-drop on and shows where copies go", async () => {
     const defaults = defaultsForTest();
@@ -159,7 +176,7 @@ describe("Settings → Local files → Watched folders", () => {
 function defaultsForTest() {
   return {
     theme: "dark" as const, glassFrost: 0.5, windowMaterial: "mica" as const, sidebarCollapsed: [],
-    player: { sourcePriority: ["local", "audius", "extension"] as Array<"local" | "audius" | "extension">, autoFallback: true, fallbackOnErrorMidtrack: true,
+    player: { sourcePriority: ["local", "audius", "extension"] as Array<"local" | "audius" | "extension">, autoFallback: true, fallbackOnErrorMidtrack: true, streamQuality: "high" as "best" | "lossless" | "high" | "low",
       outputDevice: null as string | null, gapless: true, crossfadeMs: 0, replaygain: "track" as const, volume: 80 },
     local: { watchedFolders: [], copyOnDrop: false, copyTarget: null, extensions: ["mp3"] },
     audius: { enabled: true, useAsFallback: true, showInSearch: true, showTrendingRow: false },

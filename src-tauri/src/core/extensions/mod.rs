@@ -622,14 +622,14 @@ impl ExtensionManager {
             split_key(key).ok_or_else(|| AppError::new(ErrorCode::ExtensionFailed, "bad extension source key"))?;
         let installed = self.enabled(ext_id).await?;
         let chosen = installed.quality;
+        let tier = db::settings::load(&self.db).await?.player.stream_quality;
         let (url, hosts) = match installed.spec {
             Spec::Declarative(m) => (self.declarative_stream(&m, item_id).await?, m.hosts),
             Spec::Script { manifest, code } => {
                 if !manifest.can_stream() {
                     return Err(AppError::new(ErrorCode::ExtensionUnsupported, "extension has no getDownloadUrl"));
                 }
-                let quality = chosen
-                    .filter(|q| manifest.qualities.iter().any(|o| &o.id == q))
+                let quality = script::effective_quality(&manifest, chosen.as_deref(), tier)
                     .or_else(|| manifest.quality.clone())
                     .unwrap_or_else(|| "LOSSLESS".to_owned());
                 let answer =
@@ -1161,7 +1161,10 @@ mod tests {
         assert_eq!(order.iter().map(|c| c.item_id.as_str()).collect::<Vec<_>>(), ["store-b:store-b-1", "store-a:store-a-1"]);
         let url = mgr.resolve_stream("store-b:store-b-1").await.unwrap();
         assert!(url.ends_with("/audio/store-b-1?q=HI_RES"), "{url}");
-        assert!(mgr.prepare_play(&song.key, "store-b:store-b-1", Some("8K")).await.is_err(), "unknown quality");
+        // An unknown quality is ignored: no match for the High tier here, so the extension's default.
+        mgr.prepare_play(&song.key, "store-b:store-b-1", Some("8K")).await.unwrap();
+        assert_eq!(mgr.song(&song.key).await.unwrap().song.sources[1].quality.as_deref(), Some("LOSSLESS"));
+        mgr.prepare_play(&song.key, "store-b:store-b-1", Some("HI_RES")).await.unwrap();
         assert_eq!(mgr.song(&song.key).await.unwrap().song.sources[1].quality.as_deref(), Some("HI_RES"));
 
         // Like → Liked songs, Albums and Artists; the song page reads back from the library.

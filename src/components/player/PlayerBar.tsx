@@ -16,7 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Artwork } from "@/components/track/Artwork";
 import { SourceMark } from "@/components/track/SourceMark";
-import { Icon, IconButton, Tooltip } from "@/components/ui";
+import { Icon, IconButton, Skeleton, Tooltip } from "@/components/ui";
 import { format, strings } from "@/i18n";
 import { commands, type PlayerAction, type RepeatMode } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
@@ -109,6 +109,8 @@ export function PlayerBar() {
   const hasTrack = !!state?.trackId;
   const loaded = hasTrack && (state.status === "playing" || state.status === "paused");
   const playing = state?.status === "playing";
+  // A load can take a while (the extension finds the stream first): show the song right away.
+  const loading = hasTrack && state.status === "loading";
   const track = state?.track ?? null;
   const source = state?.source ?? null;
   const repeat = state?.repeat ?? "off";
@@ -130,6 +132,7 @@ export function PlayerBar() {
           <div className="min-w-0">
             <p className="truncate text-body text-text">{track.title}</p>
             <p className="flex items-center gap-1.5 truncate text-callout text-text-muted">
+              {loading ? <span className="shrink-0">{p.loading}</span> : null}
               {source ? (
                 <Tooltip content={format(p.playingFrom, { provider: strings.source[source.kind] })}>
                   <span className="inline-flex">
@@ -157,11 +160,11 @@ export function PlayerBar() {
           />
           <IconButton label={p.previous} disabled={!hasTrack} icon={<Icon as={SkipBack} size={20} />} onClick={() => control({ type: "prev" })} />
           <IconButton
-            label={playing ? p.pause : p.play}
+            label={loading ? p.loading : playing ? p.pause : p.play}
             variant="primary"
             size="lg"
             disabled={!loaded}
-            icon={<Icon as={playing ? Pause : Play} size={20} fill="currentColor" />}
+            icon={<Icon as={playing || loading ? Pause : Play} size={20} fill="currentColor" />}
             onClick={togglePlay}
           />
           <IconButton label={p.next} disabled={!hasTrack} icon={<Icon as={SkipForward} size={20} />} onClick={() => control({ type: "next" })} />
@@ -174,7 +177,15 @@ export function PlayerBar() {
             onClick={() => control({ type: "repeat", mode: NEXT_REPEAT[repeat] })}
           />
         </div>
-        <SeekBar position={state?.positionMs ?? 0} duration={state?.durationMs ?? null} enabled={loaded && (state?.canSeek ?? false)} />
+        {loading ? (
+          <div role="progressbar" aria-label={p.loading} aria-busy="true" className="flex w-full items-center gap-2">
+            <span className="w-10" />
+            <Skeleton className="h-1 flex-1 rounded-full" />
+            <span className="w-10" />
+          </div>
+        ) : (
+          <SeekBar position={state?.positionMs ?? 0} duration={state?.durationMs ?? null} enabled={loaded && (state?.canSeek ?? false)} />
+        )}
       </div>
 
       <div className={cn("flex items-center justify-end gap-1")}>

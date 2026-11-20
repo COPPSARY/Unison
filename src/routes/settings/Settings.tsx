@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/errors";
 import { useAppInfo } from "@/lib/queries";
 import { LocalSection } from "./LocalSection";
 import { OutputRow } from "./OutputRow";
+import { StreamQualityRow } from "./StreamQualityRow";
 
 const t = strings.pages.settings;
 const s = strings.settings;
@@ -25,6 +26,7 @@ function PlaybackSection() {
       <h2 className="px-4 text-footnote font-bold text-text-tertiary">{s.playback}</h2>
       <section className="rounded-card bg-surface [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-border">
         <OutputRow />
+        <StreamQualityRow />
       </section>
     </div>
   );

@@ -28,5 +28,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // Page tests render whole routes; they pass in under a second alone but can pass 5 s when
+    // the machine is busy (e.g. `pnpm tauri dev` recompiling).
+    testTimeout: 20_000,
   },
 });

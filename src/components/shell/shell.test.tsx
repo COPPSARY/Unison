@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { usePlayerStore } from "@/stores/player";
@@ -157,6 +157,24 @@ describe("title bar", () => {
 });
 
 describe("player bar placeholder", () => {
+  it("shows the song as loading right away, then plays", async () => {
+    renderRoute("/");
+    await heading(strings.pages.home.title);
+    const bar = screen.getByRole("contentinfo", { name: strings.player.playerBar });
+    act(() => {
+      usePlayerStore.setState({
+        state: { ...fakePlayerState("loading"), source: null, positionMs: 0, durationMs: null, canSeek: false },
+      });
+    });
+    expect(within(bar).getByText("Song")).toBeInTheDocument();
+    expect(within(bar).getByText(strings.player.loading)).toBeInTheDocument();
+    expect(within(bar).getByRole("progressbar", { name: strings.player.loading })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: strings.player.loading })).toBeDisabled();
+    act(() => usePlayerStore.setState({ state: fakePlayerState("playing") }));
+    expect(within(bar).queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: strings.player.pause })).toBeEnabled();
+  });
+
   it("shows Not playing with disabled controls", async () => {
     renderRoute("/");
     await heading(strings.pages.home.title);
@@ -165,7 +183,7 @@ describe("player bar placeholder", () => {
   });
 });
 
-function fakePlayerState(status: "playing" | "paused") {
+function fakePlayerState(status: "playing" | "paused" | "loading") {
   return {
     status,
     trackId: "t1",
