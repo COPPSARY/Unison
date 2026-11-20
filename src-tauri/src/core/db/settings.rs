@@ -68,7 +68,7 @@ pub async fn save(pool: &SqlitePool, settings: Settings) -> AppResult<Settings> 
 mod tests {
     use super::*;
     use crate::core::db;
-    use crate::model::{ProviderId, ReplayGainMode, SourceKind, SpotifyMode, Theme, WindowMaterial};
+    use crate::model::{ReplayGainMode, SourceKind, Theme, WindowMaterial};
 
     async fn pool() -> (tempfile::TempDir, SqlitePool) {
         let dir = tempfile::tempdir().unwrap();
@@ -90,8 +90,6 @@ mod tests {
             glass_frost: 0.75,
             window_material: WindowMaterial::Acrylic,
             sidebar_collapsed: vec!["library".into()],
-            sync_interval_min: 60,
-            preferred_source: Some(ProviderId::Youtube),
             ..Settings::default()
         };
         let saved = save(&pool, wanted.clone()).await.unwrap();
@@ -103,8 +101,7 @@ mod tests {
     async fn player_local_audius_sections_round_trip_under_their_keys() {
         let (_d, pool) = pool().await;
         let mut wanted = Settings::default();
-        wanted.player.source_priority = vec![SourceKind::Youtube, SourceKind::Local, SourceKind::Spotify, SourceKind::Audius];
-        wanted.player.spotify_mode = SpotifyMode::Never;
+        wanted.player.source_priority = vec![SourceKind::Extension, SourceKind::Local, SourceKind::Audius];
         wanted.player.replaygain = ReplayGainMode::Album;
         wanted.player.crossfade_ms = 4_000;
         wanted.local.watched_folders = vec![r"C:\Users\me\Music".into()];
@@ -125,7 +122,7 @@ mod tests {
     #[tokio::test]
     async fn one_bad_field_keeps_the_others() {
         let (_d, pool) = pool().await;
-        for (k, v) in [("theme", r#""light""#), ("syncIntervalMin", r#""oops""#), ("futureKey", "1")] {
+        for (k, v) in [("theme", r#""light""#), ("glassFrost", r#""oops""#), ("futureKey", "1")] {
             sqlx::query("INSERT INTO settings (key, value) VALUES (?1, ?2)")
                 .bind(k)
                 .bind(v)
@@ -135,6 +132,6 @@ mod tests {
         }
         let s = load(&pool).await.unwrap();
         assert_eq!(s.theme, Theme::Light);
-        assert_eq!(s.sync_interval_min, 30);
+        assert_eq!(s.glass_frost, 0.5);
     }
 }

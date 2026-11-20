@@ -6,7 +6,6 @@ pub mod core;
 pub mod error;
 pub mod model;
 pub mod model_player;
-pub mod providers;
 mod state;
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
@@ -28,8 +27,7 @@ fn create_main_window(app: &tauri::App, saved: model::WindowMaterial) -> tauri::
         .min_inner_size(960.0, 600.0)
         // Custom title bar (T-04); Windows 11 still draws the rounded frame and shadow.
         .decorations(false)
-        // https://tauri.localhost in production: YouTube embeds need a real https origin and
-        // referrer (Universal Player addendum §0, UP-03).
+        // https://tauri.localhost in production (keeps the webview origin stable for storage).
         .use_https_scheme(true)
         .shadow(true)
         .initialization_script(window_material::init_script(material));
@@ -71,16 +69,25 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         settings.player.output_device.clone(),
         settings.player.volume,
     )?;
-    let youtube = core::playback::youtube_engine::YouTubeEngine::new(Arc::new(app.handle().clone()));
-    app.manage(AppState::new(
-        pool,
-        state::http_client()?,
+    // Extension artwork shares the artwork:// cache (served below); script extensions keep
+    // their credentials in the keychain.
+    let extensions = core::extensions::ExtensionManager::new(
+        pool.clone(),
+        paths.app_data_dir().ok().map(|d| d.join("artwork")),
         Arc::new(Keychain),
-        Arc::new(native),
-        Arc::new(youtube),
-        settings.player.volume,
-    ));
+    )?;
+    forget_streaming_accounts(&Keychain);
+    app.manage(AppState::new(pool, Arc::new(native), Arc::new(extensions), settings.player.volume));
     Ok(settings.window_material)
+}
+
+/// Spotify and YouTube were removed: drop their client id and tokens from the keychain.
+fn forget_streaming_accounts(store: &dyn core::auth::keychain::SecretStore) {
+    for key in ["spotify.client_id", "spotify.tokens", "youtube.tokens"] {
+        if let Err(e) = store.delete(key) {
+            tracing::debug!(%key, error = %e, "keychain cleanup skipped");
+        }
+    }
 }
 
 pub fn run() {
@@ -124,7 +131,6 @@ pub fn run() {
             specta.mount_events(app);
             let material = init_core(app)?;
             create_main_window(app, material)?;
-            core::sync::scheduler::start(app.handle());
             core::playback::service::start(app.handle());
             core::local::jobs::init(app.handle());
             Ok(())

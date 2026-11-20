@@ -1,5 +1,5 @@
-//! Playback engines (addendum §1): NativeEngine (local + Audius), YouTubeEngine (IFrame),
-//! SpotifyConnectEngine (remote control). The player talks to all of them through this trait.
+//! Playback engines (addendum §1): NativeEngine plays local files, Audius and extension
+//! streams. The player talks to engines through this trait.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -13,9 +13,9 @@ use crate::model::SourceKind;
 #[serde(rename_all = "camelCase")]
 pub struct PlaySource {
     pub kind: SourceKind,
-    /// Spotify track id, YouTube video id, Audius track id or local fingerprint.
+    /// Local fingerprint, Audius track id or `<extension>:<item>`.
     pub item_id: String,
-    /// Spotify/YouTube/Audius URL or absolute file path.
+    /// Web page URL or absolute file path.
     pub url: String,
 }
 
@@ -24,13 +24,12 @@ pub struct PlaySource {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum UnavailableReason {
     NotConnected,
-    PremiumRequired,
-    NoDevice,
-    NotEmbeddable,
+    /// The source is marked unavailable (its extension is off or removed).
+    Unavailable,
     FileMissing,
     UnsupportedFormat,
     Gated,
-    /// Turned off in Settings (e.g. Spotify mode "Never").
+    /// Turned off in Settings.
     Disabled,
     Offline,
     /// The track has no source of this kind.

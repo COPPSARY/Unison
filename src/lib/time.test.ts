@@ -4,7 +4,7 @@ import { relativeTime } from "./time";
 describe("relativeTime", () => {
   const now = 1_700_000_000_000;
   it("says just now under a minute", () => {
-    expect(relativeTime(now / 1000 - 20, now)).toBe(strings.sync.justNow);
+    expect(relativeTime(now / 1000 - 20, now)).toBe(strings.common.justNow);
   });
   it("uses the largest whole unit", () => {
     expect(relativeTime(now / 1000 - 5 * 60, now)).toMatch(/5 minutes ago/);

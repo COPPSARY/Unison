@@ -33,13 +33,12 @@ sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio",
 async-trait = "0.1"
 tauri-plugin-single-instance = "2"
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "charset", "http2", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "charset", "http2", "blocking", "gzip", "brotli", "deflate"] }
 getrandom = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
 url = "2"
 uuid = { version = "1.29", features = ["v7"] }
-chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 rodio = { version = "0.23", default-features = false, features = ["playback", "flac", "mp3", "mp4", "vorbis", "wav", "wav_output"] }
 lofty = "0.24.0"
 blake3 = "1.8.7"
@@ -48,6 +47,12 @@ unicode-normalization = "0.1.26"
 image = { version = "0.25.9", default-features = false, features = ["jpeg", "png"] }
 tauri-plugin-dialog = "2"
 notify-debouncer-full = "0.5"
+# Script extensions (EXT-02): sandboxed JavaScript engine, package reader, utils.* hashes.
+rquickjs = "0.14"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+hmac = "0.12"
+sha1 = "0.10"
+md-5 = "0.10"
 
 [lints]
 workspace = true
@@ -59,3 +64,4 @@ windows-version = "0.1"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 wiremock = "0.6"
+flate2 = "1"

@@ -15,34 +15,28 @@ describe("errors", () => {
   it("fills data-carrying codes", () => {
     expect(messageForCode({ type: "rateLimited", retryAfter: 30 })).toContain("30 s");
     expect(messageForCode({ type: "upstream", status: 503 })).toContain("503");
-    expect(messageForCode({ type: "youtubeEmbedBlocked", code: 153 })).toContain("153");
-    expect(messageForCode({ type: "youtubeQuotaExceeded", resetsAt: 0 })).not.toContain("{time}");
   });
 
   it("has a message for every code", () => {
     const codes: ErrorCode[] = [
       { type: "offline" },
-      { type: "authCancelled" },
-      { type: "authTimeout" },
-      { type: "needsReconnect" },
-      { type: "invalidClientId" },
-      { type: "redirectUriMismatch" },
-      { type: "spotifyPremiumRequired" },
-      { type: "noSpotifyDevice" },
       { type: "rateLimited", retryAfter: 1 },
-      { type: "youtubeQuotaExceeded", resetsAt: 1 },
-      { type: "notEmbeddable" },
       { type: "notFound" },
       { type: "upstream", status: 500 },
       { type: "internal" },
-      { type: "userNotRegistered" },
       { type: "noPlayableSource" },
       { type: "fileMissing" },
       { type: "unsupportedFormat" },
       { type: "drmProtected" },
       { type: "audiusUnavailable" },
-      { type: "youtubeEmbedBlocked", code: 153 },
       { type: "outputDeviceUnavailable" },
+      { type: "extensionLinkInvalid" },
+      { type: "extensionInvalid" },
+      { type: "extensionHostNotAllowed" },
+      { type: "extensionDisabled" },
+      { type: "extensionFailed" },
+      { type: "extensionRegistryInvalid" },
+      { type: "extensionUnsupported" },
     ];
     for (const code of codes) expect(messageForCode(code).length).toBeGreaterThan(10);
   });

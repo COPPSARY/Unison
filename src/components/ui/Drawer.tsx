@@ -18,7 +18,7 @@ export type DrawerContentProps = {
   footer?: ReactNode;
 };
 
-/** Floating glass sheet inset from the window edge (e.g. Spotify BYOK onboarding). */
+/** Floating glass sheet inset from the window edge. */
 export function DrawerContent({ title, description, children, footer }: DrawerContentProps) {
   return (
     <RDialog.Portal>

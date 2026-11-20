@@ -1,7 +1,7 @@
 //! SQLite pool (spec §7): WAL mode, foreign keys on, migrations applied at startup.
-//! Tokens and the Spotify Client ID never go in this database (keychain only).
+//! Secrets never go in this database (keychain only).
 
-pub mod accounts;
+pub mod extensions;
 pub mod library;
 pub mod local;
 pub mod playlists;
@@ -137,7 +137,7 @@ mod tests {
         .unwrap();
         sqlx::query(
             "INSERT INTO track_sources (track_id, provider, item_id, url, fetched_at)
-             VALUES ('t1', 'spotify', 'sp1', 'https://open.spotify.com/track/sp1', 0)",
+             VALUES ('t1', 'extension', 'demo:sp1', 'https://music.example/track/sp1', 0)",
         )
         .execute(&pool)
         .await
@@ -154,5 +154,62 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+    }
+
+    /// Migration 0006's cleanup: Spotify/YouTube data goes, everything else stays.
+    #[tokio::test]
+    async fn removing_spotify_and_youtube_keeps_other_sources() {
+        let (_dir, pool) = temp_db().await;
+        for (id, provider, item) in [
+            ("sp", "spotify", "sp1"),
+            ("yt", "youtube", "yt1"),
+            ("both", "spotify", "sp2"),
+            ("both", "local", "fp1"),
+            ("ext", "extension", "demo:x"),
+        ] {
+            sqlx::query(
+                "INSERT OR IGNORE INTO tracks (id, title, title_norm, artists_json, artist_norm, created_at)
+                 VALUES (?1, 'Song', 'song', '[]', '', 0)",
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO track_sources (track_id, provider, item_id, url, fetched_at) VALUES (?1, ?2, ?3, '', 0)",
+            )
+            .bind(id)
+            .bind(provider)
+            .bind(item)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query("INSERT INTO library (track_id, provider, kind, ref_id) VALUES ('sp', 'spotify', 'liked', 'sp1')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO accounts (provider, account_id, status, connected_at) VALUES ('spotify', 'u', 'connected', 0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Re-run the migration's data statements (its CREATE TABLE already ran).
+        let sql = include_str!("../../../migrations/0006_remove_spotify_youtube.sql");
+        let code: String = sql.lines().filter(|l| !l.trim_start().starts_with("--")).collect::<Vec<_>>().join("\n");
+        for stmt in code.split(';').map(str::trim).filter(|s| s.starts_with("DELETE FROM")) {
+            sqlx::query(sqlx::AssertSqlSafe(stmt.to_owned())).execute(&pool).await.unwrap();
+        }
+
+        let tracks: Vec<String> = sqlx::query_scalar("SELECT id FROM tracks ORDER BY id").fetch_all(&pool).await.unwrap();
+        assert_eq!(tracks, vec!["both", "ext"], "tracks with another source survive");
+        let providers: Vec<String> =
+            sqlx::query_scalar("SELECT DISTINCT provider FROM track_sources ORDER BY provider").fetch_all(&pool).await.unwrap();
+        assert_eq!(providers, vec!["extension", "local"]);
+        let leftovers: i64 = sqlx::query_scalar("SELECT (SELECT COUNT(*) FROM library) + (SELECT COUNT(*) FROM accounts)")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(leftovers, 0);
     }
 }

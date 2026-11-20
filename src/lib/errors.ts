@@ -15,20 +15,14 @@ export function isAppError(value: unknown): value is AppError {
   );
 }
 
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-
 /** User-facing message for an error code: what happened + the one next step (spec §9). */
 export function messageForCode(code: ErrorCode): string {
   const e = strings.errors;
   switch (code.type) {
     case "rateLimited":
       return format(e.rateLimited, { seconds: code.retryAfter });
-    case "youtubeQuotaExceeded":
-      return format(e.youtubeQuotaExceeded, { time: timeFormat.format(code.resetsAt * 1000) });
     case "upstream":
       return format(e.upstream, { status: code.status });
-    case "youtubeEmbedBlocked":
-      return format(e.youtubeEmbedBlocked, { code: code.code });
     default:
       return e[code.type];
   }

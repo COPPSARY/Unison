@@ -5,7 +5,7 @@ import { Artwork } from "@/components/track/Artwork";
 import { SourceMark } from "@/components/track/SourceMark";
 import { Icon } from "@/components/ui";
 import { format, strings } from "@/i18n";
-import type { ProviderId } from "@/lib/bindings";
+import type { SourceKind } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
 
 export type CoverItem = {
@@ -15,7 +15,7 @@ export type CoverItem = {
   /** One line of metadata. */
   meta: ReactNode;
   artwork: string | null;
-  provider: ProviderId | null;
+  provider: SourceKind | null;
   kind: "album" | "artist" | "playlist";
 };
 

@@ -7,6 +7,7 @@ import { Page } from "@/components/shell/Page";
 import { format, strings } from "@/i18n";
 import { formatNumber } from "@/lib/format";
 import { usePlaylists } from "@/lib/queries";
+import { sourceKind } from "@/lib/sources";
 
 const t = strings.pages.playlists;
 
@@ -21,7 +22,7 @@ export function Playlists() {
   const controls = useLibraryControls();
   const playlists = usePlaylists({ provider: controls.provider, sort: controls.sort, query: controls.query });
   const all = usePlaylists({ provider: null, sort: "dateAdded", query: "" });
-  const filtered = controls.query !== "" || controls.source !== "all";
+  const filtered = controls.query !== "";
 
   if (all.data && all.data.length === 0) {
     return (
@@ -41,7 +42,6 @@ export function Playlists() {
         query={controls.query}
         onClear={() => {
           controls.setFilter("");
-          controls.setSource("all");
         }}
       />
     );
@@ -56,7 +56,7 @@ export function Playlists() {
             count: formatNumber(p.trackCount),
           })}`,
           artwork: p.artwork,
-          provider: p.provider,
+          provider: sourceKind(p.provider),
           kind: "playlist",
         }))}
       />

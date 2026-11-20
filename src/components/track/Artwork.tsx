@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 
 const FALLBACK = { track: Music, album: Disc3, artist: MicVocal, playlist: ListMusic } as const;
 
-/** Cover art with a quiet fallback. Art is shown unaltered (Spotify branding rules). */
+/** Cover art with a quiet fallback. Art is shown unaltered. */
 export function Artwork({
   src,
   kind = "track",

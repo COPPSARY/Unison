@@ -6,21 +6,16 @@ import { renderRoute } from "@/test/render";
 const cmd = {
   playlistGet: vi.fn(),
   playlistTracks: vi.fn(),
-  playlistOpenExternal: vi.fn(),
-  accountsList: vi.fn(),
   playlistsList: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
   events: {
-    syncProgress: { listen: () => Promise.resolve(() => undefined) },
-    syncFinished: { listen: () => Promise.resolve(() => undefined) },
     localDrag: { listen: () => Promise.resolve(() => undefined) },
     localImportProgress: { listen: () => Promise.resolve(() => undefined) },
     localChanged: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
-    playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },
   },
   commands: new Proxy(
     {},
@@ -49,9 +44,7 @@ const t = strings.pages.playlist;
 
 function detail(over: Record<string, unknown> = {}) {
   return {
-    playlist: { id: "pl1", provider: "spotify", name: "Late night", owner: "Demo", trackCount: 2, artwork: null, editable: true },
-    url: "https://open.spotify.com/playlist/x",
-    itemsAvailable: true,
+    playlist: { id: "pl1", provider: null, name: "Late night", owner: "Demo", trackCount: 2, artwork: null, editable: true },
     durationMs: 400_000,
     ...over,
   };
@@ -59,16 +52,14 @@ function detail(over: Record<string, unknown> = {}) {
 
 const track = (i: number) => ({
   id: `t${i}`, title: `Track ${i}`, artists: ["A"], album: null, durationMs: 200_000, artwork: null,
-  isrc: null, sources: [{ provider: "spotify", itemId: `s${i}`, url: "https://x", available: true }], available: true, addedAt: 1,
+  isrc: null, sources: [{ provider: "extension", itemId: `demo:s${i}`, url: "https://x", available: true }], available: true, addedAt: 1,
 });
 
 beforeEach(() => {
   for (const fn of Object.values(cmd)) fn.mockReset();
-  cmd.accountsList.mockResolvedValue([]);
   cmd.playlistsList.mockResolvedValue([]);
   cmd.playlistGet.mockResolvedValue(detail());
   cmd.playlistTracks.mockResolvedValue({ items: [track(1), track(2)], total: 2, nextOffset: null });
-  cmd.playlistOpenExternal.mockResolvedValue(null);
 });
 
 describe("Playlist page", () => {
@@ -79,20 +70,6 @@ describe("Playlist page", () => {
     const grid = await screen.findByRole("grid", { name: "Late night" });
     expect(await within(grid).findByText("Track 2")).toBeInTheDocument();
     expect(cmd.playlistTracks).toHaveBeenCalledWith("pl1", 0, 300);
-  });
-
-  it("explains followed playlists, offers Open in Spotify and never asks for items", async () => {
-    cmd.playlistGet.mockResolvedValue(
-      detail({ itemsAvailable: false, durationMs: null, playlist: { ...detail().playlist, editable: false, owner: "Other", trackCount: 120 } }),
-    );
-    renderRoute("/playlist/pl1");
-    expect(await screen.findByText(t.followedReason)).toBeInTheDocument();
-    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-    // The player bar has its own Play button; check only the page content.
-    expect(within(screen.getByRole("main")).queryByRole("button", { name: strings.library.play })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Open in Spotify/ }));
-    expect(cmd.playlistOpenExternal).toHaveBeenCalledWith("pl1");
-    expect(cmd.playlistTracks).not.toHaveBeenCalled();
   });
 
   it("shows not found for an unknown playlist", async () => {

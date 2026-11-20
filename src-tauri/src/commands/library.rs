@@ -4,14 +4,14 @@ use tauri::State;
 
 use crate::core::db::views;
 use crate::error::AppResult;
-use crate::model::{Album, Artist, LibrarySort, ListStats, Playlist, ProviderId, TrackPage};
+use crate::model::{Album, Artist, LibrarySort, ListStats, Playlist, SourceKind, TrackPage};
 use crate::state::AppState;
 
 #[tauri::command]
 #[specta::specta]
 pub async fn library_liked(
     state: State<'_, AppState>,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     sort: LibrarySort,
     filter: Option<String>,
     offset: u32,
@@ -24,7 +24,7 @@ pub async fn library_liked(
 #[specta::specta]
 pub async fn library_liked_stats(
     state: State<'_, AppState>,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     filter: Option<String>,
 ) -> AppResult<ListStats> {
     views::liked_stats(&state.db, source, filter.as_deref()).await
@@ -53,7 +53,7 @@ pub async fn library_local_stats(state: State<'_, AppState>, filter: Option<Stri
 #[specta::specta]
 pub async fn library_albums(
     state: State<'_, AppState>,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     sort: LibrarySort,
     filter: Option<String>,
 ) -> AppResult<Vec<Album>> {
@@ -64,7 +64,7 @@ pub async fn library_albums(
 #[specta::specta]
 pub async fn library_artists(
     state: State<'_, AppState>,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     sort: LibrarySort,
     filter: Option<String>,
 ) -> AppResult<Vec<Artist>> {
@@ -75,7 +75,7 @@ pub async fn library_artists(
 #[specta::specta]
 pub async fn playlists_list(
     state: State<'_, AppState>,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     sort: LibrarySort,
     filter: Option<String>,
 ) -> AppResult<Vec<Playlist>> {

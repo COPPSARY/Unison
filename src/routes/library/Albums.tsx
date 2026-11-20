@@ -6,6 +6,7 @@ import { Empty, GridSkeleton, LoadError, NoResults } from "@/components/library/
 import { Page } from "@/components/shell/Page";
 import { strings } from "@/i18n";
 import { useAlbums } from "@/lib/queries";
+import { sourceKind } from "@/lib/sources";
 
 const t = strings.pages.albums;
 
@@ -14,7 +15,7 @@ export function Albums() {
   const controls = useLibraryControls();
   const albums = useAlbums({ provider: controls.provider, sort: controls.sort, query: controls.query });
   const all = useAlbums({ provider: null, sort: "dateAdded", query: "" });
-  const filtered = controls.query !== "" || controls.source !== "all";
+  const filtered = controls.query !== "";
 
   if (all.data && all.data.length === 0) {
     return (
@@ -34,7 +35,6 @@ export function Albums() {
         query={controls.query}
         onClear={() => {
           controls.setFilter("");
-          controls.setSource("all");
         }}
       />
     );
@@ -47,7 +47,7 @@ export function Albums() {
           title: a.name,
           meta: a.artists.join(", "),
           artwork: a.artwork,
-          provider: a.provider,
+          provider: sourceKind(a.provider),
           kind: "album",
         }))}
       />

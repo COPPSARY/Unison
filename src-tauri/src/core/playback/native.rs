@@ -292,9 +292,19 @@ impl AudioThread {
     }
 }
 
+/// Turns an extension source key into an allowlisted stream URL at play time (EXT-01).
+#[async_trait]
+pub trait StreamResolver: Send + Sync {
+    /// Whether the key's extension is installed and enabled.
+    async fn available(&self, key: &str) -> bool;
+    async fn resolve(&self, key: &str) -> AppResult<String>;
+}
+
 /// Handle to the audio thread. Cheap to share behind an `Arc`.
 pub struct NativeEngine {
     tx: std::sync::Mutex<mpsc::Sender<Cmd>>,
+    /// Extension streams; set once at startup.
+    streams: std::sync::OnceLock<std::sync::Arc<dyn StreamResolver>>,
 }
 
 impl NativeEngine {
@@ -316,7 +326,12 @@ impl NativeEngine {
             .name("unison-audio".into())
             .spawn(move || thread.run(rx))
             .map_err(|e| AppError::internal(format!("spawn audio thread: {e}")))?;
-        Ok(Self { tx: std::sync::Mutex::new(tx) })
+        Ok(Self { tx: std::sync::Mutex::new(tx), streams: std::sync::OnceLock::new() })
+    }
+
+    /// Lets the engine play extension sources (EXT-01). Later calls are ignored.
+    pub fn set_stream_resolver(&self, resolver: std::sync::Arc<dyn StreamResolver>) {
+        let _ = self.streams.set(resolver);
     }
 
     fn send(&self, cmd: Cmd) -> AppResult<()> {
@@ -357,7 +372,7 @@ impl NativeEngine {
 #[async_trait]
 impl Engine for NativeEngine {
     fn kinds(&self) -> &'static [SourceKind] {
-        &[SourceKind::Local, SourceKind::Audius]
+        &[SourceKind::Local, SourceKind::Audius, SourceKind::Extension]
     }
 
     async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason> {
@@ -365,11 +380,23 @@ impl Engine for NativeEngine {
             SourceKind::Local => check_local_file(Path::new(&source.url)),
             // Reachability is checked by the Audius provider (UP-13); here only the URL shape.
             SourceKind::Audius if is_stream_url(&source.url) => Ok(()),
+            SourceKind::Extension => match self.streams.get() {
+                Some(r) if r.available(&source.item_id).await => Ok(()),
+                _ => Err(UnavailableReason::NoSource),
+            },
             _ => Err(UnavailableReason::NoSource),
         }
     }
 
     async fn load(&self, source: &PlaySource, start_ms: u32) -> AppResult<()> {
+        if source.kind == SourceKind::Extension {
+            let resolver = self
+                .streams
+                .get()
+                .ok_or_else(|| AppError::new(ErrorCode::ExtensionDisabled, "extensions are not set up"))?;
+            let url = resolver.resolve(&source.item_id).await?;
+            return self.load_url(url, start_ms).await;
+        }
         if is_stream_url(&source.url) {
             self.load_url(source.url.clone(), start_ms).await
         } else {
@@ -497,7 +524,31 @@ mod tests {
         let bad = PlaySource { kind: SourceKind::Audius, item_id: "a".into(), url: "C:/x.mp3".into() };
         assert_eq!(engine.can_play(&ok).await, Ok(()));
         assert_eq!(engine.can_play(&bad).await, Err(UnavailableReason::NoSource));
-        assert_eq!(engine.kinds(), &[SourceKind::Local, SourceKind::Audius]);
+        assert_eq!(engine.kinds(), &[SourceKind::Local, SourceKind::Audius, SourceKind::Extension]);
+    }
+
+    struct FakeStreams;
+
+    #[async_trait]
+    impl StreamResolver for FakeStreams {
+        async fn available(&self, key: &str) -> bool {
+            key.starts_with("on:")
+        }
+        async fn resolve(&self, _key: &str) -> AppResult<String> {
+            Err(AppError::new(ErrorCode::ExtensionDisabled, "fake"))
+        }
+    }
+
+    #[tokio::test]
+    async fn extension_sources_follow_the_resolver() {
+        let engine = NativeEngine::spawn(None, 50).unwrap();
+        let src = |key: &str| PlaySource { kind: SourceKind::Extension, item_id: key.into(), url: String::new() };
+        assert_eq!(engine.can_play(&src("on:1")).await, Err(UnavailableReason::NoSource), "no resolver yet");
+        engine.set_stream_resolver(std::sync::Arc::new(FakeStreams));
+        assert_eq!(engine.can_play(&src("on:1")).await, Ok(()));
+        assert_eq!(engine.can_play(&src("off:1")).await, Err(UnavailableReason::NoSource));
+        let err = engine.load(&src("on:1"), 0).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ExtensionDisabled, "resolver errors surface from load");
     }
 
     /// Streams over HTTP through the real output (silent tone) and seeks.

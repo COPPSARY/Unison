@@ -15,7 +15,7 @@ use super::engine::{Engine, SourceStatus, UnavailableReason};
 use super::player::{FallbackEvent, LogEntry, Player, PlayerSnapshot, PlayerStatus};
 use super::queue::{Queue, RepeatMode};
 use super::resolver::{self, Resolver};
-use crate::core::auth::oauth::now_unix;
+use crate::core::now_unix;
 use crate::core::db;
 use crate::error::AppResult;
 use crate::model::SourceKind;
@@ -111,12 +111,7 @@ async fn now_playing(pool: &SqlitePool, track_id: &str) -> Option<NowPlaying> {
 }
 
 fn provider_str(kind: SourceKind) -> &'static str {
-    match kind {
-        SourceKind::Local => "local",
-        SourceKind::Spotify => "spotify",
-        SourceKind::Youtube => "youtube",
-        SourceKind::Audius => "audius",
-    }
+    kind.as_str()
 }
 
 impl PlayerService {
@@ -244,9 +239,7 @@ impl PlayerService {
                 continue;
             };
             let reason = if !found.available {
-                Some(UnavailableReason::NotEmbeddable)
-            } else if kind == SourceKind::Spotify && settings.player.spotify_mode == crate::model::SpotifyMode::Never {
-                Some(UnavailableReason::Disabled)
+                Some(UnavailableReason::Unavailable)
             } else {
                 match self.engines.iter().find(|e| e.kinds().contains(&kind)) {
                     None => Some(UnavailableReason::NotConnected),

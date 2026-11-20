@@ -1,21 +1,14 @@
 //! Secrets in the OS keychain (Windows Credential Manager), service `app.unison` (spec §7/§9).
-//! Tokens and the Spotify Client ID live only here — never SQLite, logs, events or the UI.
+//! Script extensions' credentials live only here — never SQLite, logs, events or the UI.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::error::{AppError, AppResult};
 
 pub const SERVICE: &str = "app.unison";
-
-/// Keychain keys (spec §7).
-pub mod keys {
-    pub const SPOTIFY_CLIENT_ID: &str = "spotify.client_id";
-    pub const SPOTIFY_TOKENS: &str = "spotify.tokens";
-    pub const YOUTUBE_TOKENS: &str = "youtube.tokens";
-}
 
 /// Storage for small secrets. `Keychain` in the app; `MemoryStore` in tests.
 pub trait SecretStore: Send + Sync {
@@ -97,25 +90,6 @@ pub fn set_json<T: Serialize>(store: &dyn SecretStore, key: &str, value: &T) -> 
     store.set(key, &raw)
 }
 
-/// OAuth tokens as stored in the keychain.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StoredTokens {
-    pub access_token: String,
-    pub refresh_token: Option<String>,
-    /// Unix seconds when the access token expires.
-    pub expires_at: i64,
-    pub scope: Option<String>,
-}
-
-impl std::fmt::Debug for StoredTokens {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StoredTokens")
-            .field("expires_at", &self.expires_at)
-            .field("has_refresh_token", &self.refresh_token.is_some())
-            .finish_non_exhaustive()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,20 +106,12 @@ mod tests {
     }
 
     #[test]
-    fn json_tokens_round_trip_and_debug_hides_tokens() {
+    fn json_round_trip() {
         let store = MemoryStore::default();
-        let tokens = StoredTokens {
-            access_token: "AT".into(),
-            refresh_token: Some("RT".into()),
-            expires_at: 10,
-            scope: None,
-        };
-        set_json(&store, keys::SPOTIFY_TOKENS, &tokens).unwrap();
-        let back: StoredTokens = get_json(&store, keys::SPOTIFY_TOKENS).unwrap().unwrap();
-        assert_eq!(back, tokens);
-        let dbg = format!("{back:?}");
-        assert!(!dbg.contains("AT") || !dbg.contains("\"AT\""));
-        assert!(!dbg.contains("RT\""));
+        let value = serde_json::json!({ "token": "x" });
+        set_json(&store, "extension.demo.credentials", &value).unwrap();
+        let back: serde_json::Value = get_json(&store, "extension.demo.credentials").unwrap().unwrap();
+        assert_eq!(back, value);
     }
 
     /// Real Credential Manager round trip. Run manually: `cargo test -- --ignored keychain`.

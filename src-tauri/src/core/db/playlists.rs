@@ -4,9 +4,9 @@ use sqlx::SqlitePool;
 
 use super::views::{to_track, TrackRow};
 use crate::error::{AppError, AppResult};
-use crate::model::{Page, Playlist, PlaylistDetail, ProviderId, Track};
+use crate::model::{Page, Playlist, PlaylistDetail, Track};
 
-/// Row needed to decide whether and how to load items.
+/// A playlist row.
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct PlaylistRow {
     pub id: String,
@@ -18,29 +18,6 @@ pub struct PlaylistRow {
     pub artwork_url: Option<String>,
     pub track_count: i64,
     pub items_synced: bool,
-}
-
-impl PlaylistRow {
-    pub fn provider(&self) -> Option<ProviderId> {
-        self.provider.as_deref().and_then(ProviderId::parse)
-    }
-
-    /// Whether the platform returns this playlist's items. Spotify: owned or collaborative
-    /// only (Feb 2026); Unison playlists are local.
-    pub fn items_available(&self) -> bool {
-        match self.provider() {
-            Some(ProviderId::Spotify) => self.editable,
-            Some(ProviderId::Youtube) | None => true,
-        }
-    }
-
-    pub fn url(&self) -> Option<String> {
-        let id = self.item_id.as_deref()?;
-        match self.provider()? {
-            ProviderId::Spotify => Some(format!("https://open.spotify.com/playlist/{id}")),
-            ProviderId::Youtube => Some(format!("https://www.youtube.com/playlist?list={id}")),
-        }
-    }
 }
 
 pub async fn get_row(pool: &SqlitePool, id: &str) -> AppResult<PlaylistRow> {
@@ -68,11 +45,9 @@ pub async fn detail(pool: &SqlitePool, id: &str) -> AppResult<PlaylistDetail> {
         None
     };
     Ok(PlaylistDetail {
-        url: row.url(),
-        items_available: row.items_available(),
         duration_ms: duration.map(|d| d as f64),
         playlist: Playlist {
-            provider: row.provider(),
+            provider: row.provider,
             id: row.id,
             name: row.name,
             owner: row.owner.unwrap_or_default(),
@@ -111,13 +86,3 @@ pub async fn tracks(pool: &SqlitePool, id: &str, offset: u32, limit: u32) -> App
     Ok(Page { next_offset: (end < total).then_some(end), total, items })
 }
 
-/// Owned Spotify playlists whose items were never loaded (background prefetch after sync).
-pub async fn unsynced_owned(pool: &SqlitePool, limit: u32) -> AppResult<Vec<String>> {
-    Ok(sqlx::query_scalar(
-        "SELECT id FROM playlists WHERE provider = 'spotify' AND editable = 1 AND items_synced = 0
-         ORDER BY rowid LIMIT ?1",
-    )
-    .bind(i64::from(limit))
-    .fetch_all(pool)
-    .await?)
-}

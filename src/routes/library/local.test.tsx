@@ -28,7 +28,6 @@ vi.mock("@/lib/bindings", () => ({
     localChanged: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
-    playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },
   },
   commands: new Proxy(
     {},

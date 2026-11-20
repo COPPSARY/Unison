@@ -1,13 +1,15 @@
 //! `pnpm seed`: builds a demo database for UI and performance checks (spec §10): 10,000 liked
-//! songs (the first 1,200 hand-varied: long names, Khmer and K-pop titles, unavailable items,
-//! duplicates across sources), albums, artists and playlists. Open it with
+//! songs from two demo extensions (the first 1,200 hand-varied: long names, Khmer and K-pop
+//! titles, unavailable items, duplicates across extensions), albums, artists and playlists. Open it with
 //! `UNISON_DB=<path> pnpm tauri dev`. Never touches the real database.
 
 use std::path::PathBuf;
 
 use unison_lib::core::db::{self, library as lib};
 use unison_lib::core::db::library::{AlbumInput, ArtistInput, LibraryKind, PlaylistInput, TrackInput};
-use unison_lib::model::ProviderId;
+
+/// `track_sources` provider of extension tracks; item ids are `<extension>:<item>`.
+const EXT: &str = "extension";
 
 /// Small deterministic PRNG so every seed run produces the same data.
 struct Lcg(u64);
@@ -81,25 +83,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             artwork: None,
             release_date: Some(format!("20{:02}-0{}-1{}", 10 + a % 15, 1 + a % 9, a % 9)),
         };
-        let id = lib::upsert_album(&mut tx, ProviderId::Spotify, &input).await?;
-        lib::upsert_library(&mut tx, ProviderId::Spotify, LibraryKind::SavedAlbum, &input.item_id, Some(&id), Some(now - (a as i64) * 86_400)).await?;
+        let id = lib::upsert_album(&mut tx, EXT, &input).await?;
+        lib::upsert_library(&mut tx, EXT, LibraryKind::SavedAlbum, &input.item_id, Some(&id), Some(now - (a as i64) * 86_400)).await?;
         album_ids.push(input.name);
     }
 
     for (n, name) in ARTISTS.iter().enumerate() {
-        let provider = if n % 3 == 0 { ProviderId::Youtube } else { ProviderId::Spotify };
         let input = ArtistInput { item_id: format!("demo-artist-{n}"), name: (*name).to_owned(), artwork: None };
-        lib::upsert_artist(&mut tx, provider, &input).await?;
-        lib::upsert_library(&mut tx, provider, LibraryKind::FollowedArtist, &input.item_id, None, None).await?;
+        lib::upsert_artist(&mut tx, EXT, &input).await?;
+        lib::upsert_library(&mut tx, EXT, LibraryKind::FollowedArtist, &input.item_id, None, None).await?;
     }
 
     for i in 0..10_000usize {
-        let provider = if i % 4 == 3 { ProviderId::Youtube } else { ProviderId::Spotify };
-        let item_id = format!("demo-{}-{i:05}", provider.as_str());
-        let url = match provider {
-            ProviderId::Spotify => format!("https://open.spotify.com/track/{item_id}"),
-            ProviderId::Youtube => format!("https://www.youtube.com/watch?v={item_id}"),
-        };
+        let ext = if i % 4 == 3 { "demo-radio" } else { "demo-store" };
+        let item_id = format!("{ext}:{i:05}");
+        let url = format!("https://{ext}.example/track/{i:05}");
         let track = TrackInput {
             item_id: item_id.clone(),
             url,
@@ -113,30 +111,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             duration_ms: Some(u32::try_from(120_000 + rng.next() % 240_000).unwrap_or(200_000)),
             isrc: None,
             artwork: None,
-            // Unavailable items: deleted/region-blocked videos and local files.
+            // Unavailable items: removed by the extension's service.
             available: i % 97 != 0,
         };
-        let tid = lib::upsert_track(&mut tx, provider, &track, now).await?;
+        let tid = lib::upsert_track(&mut tx, EXT, &track, now).await?;
         let added = now - i64::try_from(i).unwrap_or(0) * 9_000;
-        lib::upsert_library(&mut tx, provider, LibraryKind::Liked, &item_id, Some(&tid), Some(added)).await?;
+        lib::upsert_library(&mut tx, EXT, LibraryKind::Liked, &item_id, Some(&tid), Some(added)).await?;
 
-        // Duplicates across sources (first 1,200): the same song as a YouTube video, unmatched
-        // until T-30 merges them.
-        if i < 1_200 && i % 6 == 0 && provider == ProviderId::Spotify {
-            let yt_id = format!("demo-youtube-dup-{i:05}");
+        // Duplicates across extensions (first 1,200): the same song from the radio extension,
+        // unmatched until T-30 merges them.
+        if i < 1_200 && i % 6 == 0 && ext == "demo-store" {
+            let dup_id = format!("demo-radio:dup-{i:05}");
             let dup = TrackInput {
-                item_id: yt_id.clone(),
-                url: format!("https://www.youtube.com/watch?v={yt_id}"),
-                title: format!("{} (Official Video)", track.title),
+                item_id: dup_id.clone(),
+                url: format!("https://demo-radio.example/track/dup-{i:05}"),
+                title: format!("{} (Live)", track.title),
                 ..track.clone()
             };
-            let did = lib::upsert_track(&mut tx, ProviderId::Youtube, &dup, now).await?;
-            lib::upsert_library(&mut tx, ProviderId::Youtube, LibraryKind::Liked, &yt_id, Some(&did), Some(added - 60)).await?;
+            let did = lib::upsert_track(&mut tx, EXT, &dup, now).await?;
+            lib::upsert_library(&mut tx, EXT, LibraryKind::Liked, &dup_id, Some(&did), Some(added - 60)).await?;
         }
     }
 
     for p in 0..12 {
-        let provider = if p % 3 == 0 { ProviderId::Youtube } else { ProviderId::Spotify };
         let input = PlaylistInput {
             item_id: format!("demo-playlist-{p}"),
             name: if p == 4 { "ស្តាប់ពេលយប់".to_owned() } else { format!("{} mix", rng.pick(WORDS)) },
@@ -147,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             snapshot: Some(format!("s{p}")),
             track_count: u32::try_from(10 + p * 17).unwrap_or(10),
         };
-        lib::upsert_playlist(&mut tx, provider, &input, now).await?;
+        lib::upsert_playlist(&mut tx, EXT, &input, now).await?;
     }
 
     tx.commit().await?;

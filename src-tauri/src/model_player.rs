@@ -9,28 +9,38 @@ use specta::Type;
 #[serde(rename_all = "camelCase")]
 pub enum SourceKind {
     Local,
-    Spotify,
-    Youtube,
     Audius,
+    /// An installed extension (EXT-01/02); streamed by NativeEngine.
+    Extension,
 }
 
 impl SourceKind {
-    /// Default "Play from" order: Local → Spotify → YouTube → Audius.
-    pub const DEFAULT_PRIORITY: [SourceKind; 4] =
-        [SourceKind::Local, SourceKind::Spotify, SourceKind::Youtube, SourceKind::Audius];
+    /// Default "Play from" order: Local → Audius → extensions.
+    pub const DEFAULT_PRIORITY: [SourceKind; 3] = [SourceKind::Local, SourceKind::Audius, SourceKind::Extension];
+
+    /// The `track_sources.provider` string.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SourceKind::Local => "local",
+            SourceKind::Audius => "audius",
+            SourceKind::Extension => "extension",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<SourceKind> {
+        match value {
+            "local" => Some(SourceKind::Local),
+            "audius" => Some(SourceKind::Audius),
+            "extension" => Some(SourceKind::Extension),
+            _ => None,
+        }
+    }
 }
 
-/// How Spotify is used for playback.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SpotifyMode {
-    /// Use Spotify when Premium + a device are available, otherwise fall back.
-    #[default]
-    Auto,
-    /// Ask every time before playing on Spotify.
-    AlwaysAsk,
-    /// Never use Spotify for playback.
-    Never,
+/// Reads a stored priority list, dropping sources Unison no longer has (Spotify, YouTube).
+fn known_sources<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<SourceKind>, D::Error> {
+    let raw: Vec<serde_json::Value> = Deserialize::deserialize(d)?;
+    Ok(raw.iter().filter_map(|v| v.as_str()).filter_map(SourceKind::parse).collect())
 }
 
 /// Volume leveling (NativeEngine).
@@ -48,12 +58,11 @@ pub const MAX_CROSSFADE_MS: u32 = 12_000;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PlayerSettings {
+    #[serde(deserialize_with = "known_sources")]
+    #[specta(type = Vec<SourceKind>)]
     pub source_priority: Vec<SourceKind>,
     pub auto_fallback: bool,
     pub fallback_on_error_midtrack: bool,
-    pub spotify_mode: SpotifyMode,
-    /// Hosted YouTube player page; `None` = direct embed.
-    pub youtube_relay_url: Option<String>,
     /// NativeEngine output device; `None` = system default.
     pub output_device: Option<String>,
     pub gapless: bool,
@@ -70,8 +79,6 @@ impl Default for PlayerSettings {
             source_priority: SourceKind::DEFAULT_PRIORITY.to_vec(),
             auto_fallback: true,
             fallback_on_error_midtrack: true,
-            spotify_mode: SpotifyMode::Auto,
-            youtube_relay_url: None,
             output_device: None,
             gapless: true,
             crossfade_ms: 0,
@@ -93,8 +100,6 @@ impl PlayerSettings {
         self.source_priority = priority;
         self.crossfade_ms = self.crossfade_ms.min(MAX_CROSSFADE_MS);
         self.volume = self.volume.min(100);
-        self.youtube_relay_url = clean_optional(self.youtube_relay_url)
-            .filter(|url| url.starts_with("https://"));
         self.output_device = clean_optional(self.output_device);
         self
     }
@@ -192,7 +197,7 @@ mod tests {
         let p = PlayerSettings::default();
         assert_eq!(p.source_priority, SourceKind::DEFAULT_PRIORITY.to_vec());
         assert!(p.auto_fallback && p.fallback_on_error_midtrack && p.gapless);
-        assert_eq!((p.spotify_mode, p.replaygain, p.crossfade_ms), (SpotifyMode::Auto, ReplayGainMode::Track, 0));
+        assert_eq!((p.replaygain, p.crossfade_ms), (ReplayGainMode::Track, 0));
         let l = LocalSettings::default();
         assert!(!l.copy_on_drop);
         assert_eq!(l.extensions.len(), 7);
@@ -203,14 +208,19 @@ mod tests {
     #[test]
     fn priority_is_deduped_and_completed() {
         let p = PlayerSettings {
-            source_priority: vec![SourceKind::Youtube, SourceKind::Youtube, SourceKind::Local],
+            source_priority: vec![SourceKind::Extension, SourceKind::Extension, SourceKind::Local],
             ..PlayerSettings::default()
         }
         .sanitized();
-        assert_eq!(
-            p.source_priority,
-            vec![SourceKind::Youtube, SourceKind::Local, SourceKind::Spotify, SourceKind::Audius]
-        );
+        assert_eq!(p.source_priority, vec![SourceKind::Extension, SourceKind::Local, SourceKind::Audius]);
+    }
+
+    #[test]
+    fn stored_priorities_drop_removed_sources() {
+        let p: PlayerSettings =
+            serde_json::from_str(r#"{"sourcePriority":["youtube","extension","spotify","local"],"volume":40}"#).unwrap();
+        assert_eq!(p.source_priority, vec![SourceKind::Extension, SourceKind::Local]);
+        assert_eq!(p.volume, 40, "other player settings survive");
     }
 
     #[test]
@@ -218,13 +228,11 @@ mod tests {
         let p = PlayerSettings {
             crossfade_ms: 99_999,
             volume: 250,
-            youtube_relay_url: Some("  http://insecure.example/yt.html ".into()),
             output_device: Some("   ".into()),
             ..PlayerSettings::default()
         }
         .sanitized();
         assert_eq!((p.crossfade_ms, p.volume), (MAX_CROSSFADE_MS, 100));
-        assert_eq!(p.youtube_relay_url, None, "relay must be https");
         assert_eq!(p.output_device, None);
 
         let l = LocalSettings {
@@ -243,6 +251,6 @@ mod tests {
         assert_eq!(p.volume, 40);
         assert!(p.gapless);
         let json = serde_json::to_value(PlayerSettings::default()).unwrap();
-        assert_eq!(json["sourcePriority"], serde_json::json!(["local", "spotify", "youtube", "audius"]));
+        assert_eq!(json["sourcePriority"], serde_json::json!(["local", "audius", "extension"]));
     }
 }

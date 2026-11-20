@@ -9,7 +9,7 @@ use std::time::UNIX_EPOCH;
 use sqlx::SqlitePool;
 
 use super::{fingerprint, scan, tags, ImportReporter, Issue, LocalChanged, LocalImportProgress, BATCH_SIZE, MAX_ISSUES};
-use crate::core::auth::oauth::now_unix;
+use crate::core::now_unix;
 use crate::core::db::local::{self as repo, LocalFileInput, Stored};
 use crate::core::matching::matcher::MatchIndex;
 use crate::error::{AppError, AppResult};
@@ -263,7 +263,7 @@ mod tests {
     use crate::core::db::library::{upsert_library, upsert_track, LibraryKind, TrackInput};
     use crate::core::local::testing::{png, tag, write_wav};
     use crate::core::local::IssueKind;
-    use crate::model::ProviderId;
+
 
     #[derive(Default)]
     struct Recorder {
@@ -359,12 +359,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn a_local_copy_of_a_liked_spotify_song_merges_into_one_track() {
+    async fn a_local_copy_of_a_liked_extension_song_merges_into_one_track() {
         let env = Env::new().await;
         let mut conn = env.pool.acquire().await.unwrap();
         let liked = TrackInput {
             item_id: "sp1".into(),
-            url: "https://open.spotify.com/track/sp1".into(),
+            url: "https://music.example/track/sp1".into(),
             title: "Blinding Lights".into(),
             artists: vec!["The Weeknd".into()],
             album: Some("After Hours".into()),
@@ -373,13 +373,13 @@ mod tests {
             artwork: Some("https://i.scdn.co/image/x".into()),
             available: true,
         };
-        let track_id = upsert_track(&mut conn, ProviderId::Spotify, &liked, 0).await.unwrap();
-        upsert_library(&mut conn, ProviderId::Spotify, LibraryKind::Liked, "sp1", Some(&track_id), Some(0))
+        let track_id = upsert_track(&mut conn, "extension", &liked, 0).await.unwrap();
+        upsert_library(&mut conn, "extension", LibraryKind::Liked, "sp1", Some(&track_id), Some(0))
             .await
             .unwrap();
         // A different song by the same artist that must stay separate.
         let other = TrackInput { item_id: "sp2".into(), title: "Save Your Tears".into(), ..liked.clone() };
-        upsert_track(&mut conn, ProviderId::Spotify, &other, 0).await.unwrap();
+        upsert_track(&mut conn, "extension", &other, 0).await.unwrap();
         drop(conn);
 
         let file = env.music().join("01 Blinding Lights.wav");
@@ -405,7 +405,7 @@ mod tests {
         assert!(confidence > 0.95, "{confidence}");
         assert_eq!(quality.as_deref(), Some("wav"));
         assert_eq!(gain, Some(-6.5));
-        // The Spotify metadata stays; the liked row still points at the same track.
+        // The extension metadata stays; the liked row still points at the same track.
         let (title, artwork): (String, Option<String>) =
             sqlx::query_as("SELECT title, artwork_url FROM tracks WHERE id = ?1").bind(&track_id).fetch_one(&env.pool).await.unwrap();
         assert_eq!(title, "Blinding Lights");
@@ -417,7 +417,7 @@ mod tests {
             .unwrap();
         let img = image::open(art.unwrap()).unwrap();
         assert_eq!(img.width(), 600);
-        // The merged track keeps Spotify's artwork; a local-only track gets the saved cover's URL.
+        // The merged track keeps the extension's artwork; a local-only track gets the saved cover's URL.
         let live_art: Option<String> = sqlx::query_scalar(
             "SELECT t.artwork_url FROM tracks t JOIN track_sources s ON s.track_id = t.id
              JOIN local_files f ON f.fingerprint = s.item_id WHERE f.path LIKE '%Live%'",
@@ -431,7 +431,7 @@ mod tests {
         let sources = crate::core::playback::resolver::stored_sources(&env.pool, &track_id).await.unwrap();
         let mut kinds: Vec<_> = sources.iter().map(|s| s.source.kind).collect();
         kinds.sort_by_key(|k| format!("{k:?}"));
-        assert_eq!(kinds, vec![crate::model::SourceKind::Local, crate::model::SourceKind::Spotify]);
+        assert_eq!(kinds, vec![crate::model::SourceKind::Extension, crate::model::SourceKind::Local]);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -449,7 +449,7 @@ mod tests {
             artwork: None,
             available: true,
         };
-        let id = upsert_track(&mut conn, ProviderId::Spotify, &sp, 0).await.unwrap();
+        let id = upsert_track(&mut conn, "extension", &sp, 0).await.unwrap();
         drop(conn);
         let file = env.music().join("x.wav");
         write_wav(&file, 0.5, 3);

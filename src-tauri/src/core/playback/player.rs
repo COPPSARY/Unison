@@ -16,7 +16,7 @@ use crate::model::SourceKind;
 /// "Previous" restarts the current track when it has played longer than this.
 const RESTART_THRESHOLD_MS: u32 = 3_000;
 /// Ticks the engine must disagree on playing/paused before the player follows it (paused
-/// or resumed outside Unison, e.g. in the Spotify app).
+/// or resumed outside Unison).
 const FOLLOW_TICKS: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
@@ -94,12 +94,9 @@ struct Session {
 
 fn reason_for(err: &AppError) -> UnavailableReason {
     match &err.code {
-        ErrorCode::SpotifyPremiumRequired => UnavailableReason::PremiumRequired,
-        ErrorCode::NoSpotifyDevice => UnavailableReason::NoDevice,
         ErrorCode::FileMissing => UnavailableReason::FileMissing,
         ErrorCode::UnsupportedFormat | ErrorCode::DrmProtected => UnavailableReason::UnsupportedFormat,
-        ErrorCode::YoutubeEmbedBlocked { .. } | ErrorCode::NotEmbeddable => UnavailableReason::NotEmbeddable,
-        ErrorCode::NeedsReconnect => UnavailableReason::NotConnected,
+        ErrorCode::ExtensionDisabled => UnavailableReason::Disabled,
         _ => UnavailableReason::Offline,
     }
 }
@@ -473,9 +470,8 @@ pub(crate) mod tests {
         fn kinds(&self) -> &'static [SourceKind] {
             match self.kind {
                 SourceKind::Local => &[SourceKind::Local],
-                SourceKind::Spotify => &[SourceKind::Spotify],
-                SourceKind::Youtube => &[SourceKind::Youtube],
                 SourceKind::Audius => &[SourceKind::Audius],
+                SourceKind::Extension => &[SourceKind::Extension],
             }
         }
         async fn can_play(&self, source: &PlaySource) -> Result<(), UnavailableReason> {
@@ -555,14 +551,14 @@ pub(crate) mod tests {
         Player::new(engines, Arc::new(FixedCandidates(map, policy)), Queue::new(Rng::seeded(3)))
     }
 
-    fn player(map: HashMap<String, Vec<PlaySource>>, blocked_yt: Vec<String>) -> (Player, Log) {
+    fn player(map: HashMap<String, Vec<PlaySource>>, blocked_ext: Vec<String>) -> (Player, Log) {
         let log: Log = Arc::new(Mutex::new(Vec::new()));
         let local = FakeEngine::new(SourceKind::Local, log.clone());
-        let yt = Arc::new(FakeEngine {
-            blocked: blocked_yt.into_iter().map(|b| (b, UnavailableReason::NotEmbeddable)).collect(),
-            ..FakeEngine::plain(SourceKind::Youtube, log.clone())
+        let ext = Arc::new(FakeEngine {
+            blocked: blocked_ext.into_iter().map(|b| (b, UnavailableReason::Unavailable)).collect(),
+            ..FakeEngine::plain(SourceKind::Extension, log.clone())
         });
-        (player_with(vec![local, yt], map, Policy::default()), log)
+        (player_with(vec![local, ext], map, Policy::default()), log)
     }
 
     fn loads(log: &Log) -> Vec<String> {
@@ -621,16 +617,16 @@ pub(crate) mod tests {
     async fn picks_first_playable_candidate_and_pauses_previous_engine() {
         let mut map = HashMap::new();
         map.insert("t0".to_owned(), vec![src(SourceKind::Local, "f0")]);
-        map.insert("t1".to_owned(), vec![src(SourceKind::Youtube, "blocked"), src(SourceKind::Youtube, "v1")]);
+        map.insert("t1".to_owned(), vec![src(SourceKind::Extension, "blocked"), src(SourceKind::Extension, "v1")]);
         let (mut p, log) = player(map, vec!["blocked".into()]);
         p.play(ids(2), 0, None).await.unwrap();
         p.next().await.unwrap();
-        assert_eq!(p.snapshot().source, Some(src(SourceKind::Youtube, "v1")));
-        assert_eq!(p.last_skips(), &[(SourceKind::Youtube, UnavailableReason::NotEmbeddable)]);
+        assert_eq!(p.snapshot().source, Some(src(SourceKind::Extension, "v1")));
+        assert_eq!(p.last_skips(), &[(SourceKind::Extension, UnavailableReason::Unavailable)]);
         let entries = log.lock().unwrap().clone();
         let pause_local = entries.iter().position(|l| l == "Local:pause").unwrap();
-        let load_yt = entries.iter().position(|l| l == "Youtube:load v1").unwrap();
-        assert!(pause_local < load_yt, "previous engine paused before the new one loads");
+        let load_ext = entries.iter().position(|l| l == "Extension:load v1").unwrap();
+        assert!(pause_local < load_ext, "previous engine paused before the new one loads");
     }
 
     #[tokio::test]
@@ -651,83 +647,81 @@ pub(crate) mod tests {
 
     // ---- Fallback test matrix (addendum UP-09) ----
 
-    fn matrix_engines(log: &Log, spotify_premium: bool, youtube_blocked: bool) -> Vec<Arc<dyn Engine>> {
-        let spotify = FakeEngine {
-            blocked: if spotify_premium { vec![] } else { vec![("*".into(), UnavailableReason::PremiumRequired)] },
-            ..FakeEngine::plain(SourceKind::Spotify, log.clone())
+    fn matrix_engines(log: &Log, extension_online: bool, audius_blocked: bool) -> Vec<Arc<dyn Engine>> {
+        let ext = FakeEngine {
+            blocked: if extension_online { vec![] } else { vec![("*".into(), UnavailableReason::Offline)] },
+            ..FakeEngine::plain(SourceKind::Extension, log.clone())
         };
-        let youtube = FakeEngine {
-            blocked: if youtube_blocked { vec![("*".into(), UnavailableReason::NotEmbeddable)] } else { vec![] },
-            ..FakeEngine::plain(SourceKind::Youtube, log.clone())
+        let audius = FakeEngine {
+            blocked: if audius_blocked { vec![("*".into(), UnavailableReason::Unavailable)] } else { vec![] },
+            ..FakeEngine::plain(SourceKind::Audius, log.clone())
         };
-        vec![
-            Arc::new(spotify),
-            Arc::new(youtube),
-            FakeEngine::new(SourceKind::Local, log.clone()),
-            FakeEngine::new(SourceKind::Audius, log.clone()),
-        ]
+        vec![Arc::new(ext), Arc::new(audius), FakeEngine::new(SourceKind::Local, log.clone())]
     }
 
     fn all_sources() -> HashMap<String, Vec<PlaySource>> {
         let mut map = HashMap::new();
         map.insert(
             "t0".to_owned(),
-            vec![src(SourceKind::Spotify, "sp"), src(SourceKind::Youtube, "yt"), src(SourceKind::Local, "file"), src(SourceKind::Audius, "au")],
+            vec![src(SourceKind::Extension, "ex"), src(SourceKind::Audius, "au"), src(SourceKind::Local, "file")],
         );
         map
     }
 
     #[tokio::test]
-    async fn free_spotify_user_plays_via_youtube_and_logs_a_fallback() {
+    async fn offline_extension_falls_back_and_logs_it() {
         let log: Log = Arc::new(Mutex::new(Vec::new()));
         let mut p = player_with(matrix_engines(&log, false, false), all_sources(), Policy::default());
         p.play(ids(1), 0, None).await.unwrap();
-        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Youtube));
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Audius));
         let fb = p.take_fallbacks();
         assert_eq!(fb.len(), 1);
-        assert_eq!((fb[0].from_provider, fb[0].to_provider, fb[0].reason.clone()), (SourceKind::Spotify, SourceKind::Youtube, UnavailableReason::PremiumRequired));
+        assert_eq!(
+            (fb[0].from_provider, fb[0].to_provider, fb[0].reason.clone()),
+            (SourceKind::Extension, SourceKind::Audius, UnavailableReason::Offline)
+        );
         let rows = p.take_log();
         assert_eq!(rows[0].reason, EndedReason::Fallback);
-        assert_eq!(rows[0].provider, SourceKind::Spotify);
+        assert_eq!(rows[0].provider, SourceKind::Extension);
     }
 
     #[tokio::test]
-    async fn blocked_youtube_falls_to_local() {
+    async fn unavailable_audius_falls_to_local() {
         let log: Log = Arc::new(Mutex::new(Vec::new()));
         let mut map = HashMap::new();
-        map.insert("t0".to_owned(), vec![src(SourceKind::Youtube, "yt"), src(SourceKind::Local, "file"), src(SourceKind::Audius, "au")]);
+        map.insert("t0".to_owned(), vec![src(SourceKind::Audius, "au"), src(SourceKind::Local, "file")]);
         let mut p = player_with(matrix_engines(&log, true, true), map, Policy::default());
         p.play(ids(1), 0, None).await.unwrap();
         assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Local));
-        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::NotEmbeddable);
+        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::Unavailable);
     }
 
     #[tokio::test]
-    async fn only_spotify_without_premium_is_no_playable_source() {
+    async fn only_an_offline_extension_is_no_playable_source() {
         let log: Log = Arc::new(Mutex::new(Vec::new()));
         let mut map = HashMap::new();
-        map.insert("t0".to_owned(), vec![src(SourceKind::Spotify, "sp")]);
+        map.insert("t0".to_owned(), vec![src(SourceKind::Extension, "ex")]);
         let mut p = player_with(matrix_engines(&log, false, false), map, Policy::default());
         let err = p.play(ids(1), 0, None).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::NoPlayableSource);
         assert_eq!(p.snapshot().status, PlayerStatus::Error);
-        assert_eq!(p.last_skips(), &[(SourceKind::Spotify, UnavailableReason::PremiumRequired)]);
+        assert_eq!(p.last_skips(), &[(SourceKind::Extension, UnavailableReason::Offline)]);
     }
 
     #[tokio::test]
     async fn a_failed_load_falls_back_and_a_single_failure_keeps_its_error() {
         let log: Log = Arc::new(Mutex::new(Vec::new()));
-        let spotify = FakeEngine { load_error: Some(ErrorCode::NoSpotifyDevice), ..FakeEngine::plain(SourceKind::Spotify, log.clone()) };
-        let engines: Vec<Arc<dyn Engine>> = vec![Arc::new(spotify), FakeEngine::new(SourceKind::Youtube, log.clone())];
+        let ext = FakeEngine { load_error: Some(ErrorCode::ExtensionDisabled), ..FakeEngine::plain(SourceKind::Extension, log.clone()) };
+        let engines: Vec<Arc<dyn Engine>> = vec![Arc::new(ext), FakeEngine::new(SourceKind::Audius, log.clone())];
         let mut map = HashMap::new();
-        map.insert("t0".to_owned(), vec![src(SourceKind::Spotify, "sp"), src(SourceKind::Youtube, "yt")]);
-        map.insert("t1".to_owned(), vec![src(SourceKind::Spotify, "sp1")]);
+        map.insert("t0".to_owned(), vec![src(SourceKind::Extension, "ex"), src(SourceKind::Audius, "au")]);
+        map.insert("t1".to_owned(), vec![src(SourceKind::Extension, "ex1")]);
         let mut p = player_with(engines, map, Policy::default());
         p.play(ids(2), 0, None).await.unwrap();
-        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Youtube));
-        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::NoDevice);
+        assert_eq!(p.snapshot().source.map(|s| s.kind), Some(SourceKind::Audius));
+        assert_eq!(p.take_fallbacks()[0].reason, UnavailableReason::Disabled);
         let err = p.next().await.unwrap_err();
-        assert_eq!(err.code, ErrorCode::NoSpotifyDevice, "the specific reason is kept");
+        assert_eq!(err.code, ErrorCode::ExtensionDisabled, "the specific reason is kept");
     }
 
     #[tokio::test]

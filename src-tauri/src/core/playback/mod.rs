@@ -7,5 +7,3 @@ pub mod player;
 pub mod queue;
 pub mod resolver;
 pub mod service;
-pub mod youtube;
-pub mod youtube_engine;

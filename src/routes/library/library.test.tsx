@@ -9,22 +9,17 @@ const cmd = {
   libraryAlbums: vi.fn(),
   libraryArtists: vi.fn(),
   playlistsList: vi.fn(),
-  accountsList: vi.fn(),
-  syncNow: vi.fn(),
   playerPlay: vi.fn(),
   playerState: vi.fn(),
 };
 
 vi.mock("@/lib/bindings", () => ({
   events: {
-    syncProgress: { listen: () => Promise.resolve(() => undefined) },
-    syncFinished: { listen: () => Promise.resolve(() => undefined) },
     localDrag: { listen: () => Promise.resolve(() => undefined) },
     localImportProgress: { listen: () => Promise.resolve(() => undefined) },
     localChanged: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
-    playerYoutubeCommand: { listen: () => Promise.resolve(() => undefined) },
   },
   commands: new Proxy(
     {},
@@ -69,7 +64,7 @@ function track(i: number, available = true) {
     durationMs: 200_000 + i * 1000,
     artwork: null,
     isrc: null,
-    sources: [{ provider: i % 2 ? "youtube" : "spotify", itemId: `s${i}`, url: "https://x", available: true }],
+    sources: [{ provider: i % 2 ? "extension" : "local", itemId: `s${i}`, url: "https://x", available: true }],
     available,
     addedAt: 1_700_000_000 - i * 86_400,
   };
@@ -79,15 +74,14 @@ const page = (items: unknown[], total = items.length) => ({ items, total, nextOf
 
 beforeEach(() => {
   for (const fn of Object.values(cmd)) fn.mockReset();
-  cmd.accountsList.mockResolvedValue([]);
   cmd.libraryLiked.mockResolvedValue(page([track(1), track(2), track(3, false)]));
   cmd.libraryLikedStats.mockResolvedValue({ count: 3, durationMs: 3 * 60_000 * 4 });
   cmd.libraryAlbums.mockResolvedValue([
-    { id: "al1", provider: "spotify", itemId: "x", name: "Demo Album", artists: ["Zed"], artwork: null, releaseDate: null, addedAt: 1 },
+    { id: "al1", provider: "extension", itemId: "x", name: "Demo Album", artists: ["Zed"], artwork: null, releaseDate: null, addedAt: 1 },
   ]);
-  cmd.libraryArtists.mockResolvedValue([{ id: "ar1", provider: "spotify", itemId: "x", name: "Zed", artwork: null }]);
+  cmd.libraryArtists.mockResolvedValue([{ id: "ar1", provider: "extension", itemId: "x", name: "Zed", artwork: null }]);
   cmd.playlistsList.mockResolvedValue([
-    { id: "pl1", provider: "spotify", name: "Late night", owner: "Demo", trackCount: 42, artwork: null, editable: true },
+    { id: "pl1", provider: "extension", name: "Late night", owner: "Demo", trackCount: 42, artwork: null, editable: true },
   ]);
 });
 
@@ -99,9 +93,8 @@ describe("Liked songs", () => {
     expect(within(grid).getByText("Artist 2")).toBeInTheDocument();
     expect(within(grid).getByText("Album 1")).toBeInTheDocument();
     expect(within(grid).getByText("3:21")).toBeInTheDocument();
-    expect(within(grid).getAllByRole("img", { name: strings.source.youtube }).length).toBeGreaterThan(0);
+    expect(within(grid).getAllByRole("img", { name: strings.source.extension }).length).toBeGreaterThan(0);
     expect(screen.getByText(/3 songs · 12 min/)).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: strings.common.source })).toBeInTheDocument();
     expect(cmd.libraryLiked).toHaveBeenCalledWith(null, "dateAdded", null, 0, 300);
   });
 
@@ -178,11 +171,11 @@ describe("Liked songs", () => {
     expect(await screen.findByText("Song 1")).toBeInTheDocument();
   });
 
-  it("passes source and sort to Rust", async () => {
+  it("passes the filter to Rust", async () => {
     renderRoute("/library/liked");
     await screen.findByText("Song 1");
-    await userEvent.click(screen.getByRole("radio", { name: strings.source.spotify }));
-    await waitFor(() => expect(cmd.libraryLiked).toHaveBeenCalledWith("spotify", "dateAdded", null, 0, 300));
+    await userEvent.type(screen.getByLabelText(strings.common.filter), "zed");
+    await waitFor(() => expect(cmd.libraryLiked).toHaveBeenCalledWith(null, "dateAdded", "zed", 0, 300));
   });
 });
 

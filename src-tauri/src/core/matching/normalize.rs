@@ -14,7 +14,7 @@ static TITLE_NOISE: LazyLock<Option<Regex>> = LazyLock::new(|| {
     .ok()
 });
 
-/// Spotify-style remaster suffix: `Song - Remastered 2009`, `Song - 2011 Remaster`.
+/// Remaster suffix: `Song - Remastered 2009`, `Song - 2011 Remaster`.
 static REMASTER_SUFFIX: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"\s+-\s+(?:\d{4}\s+)?remaster(?:ed)?(?:\s+\d{4})?(?:\s+version)?\s*$").ok());
 

@@ -1,4 +1,4 @@
-import { ExternalLink, ListMusic, Play, Shuffle } from "lucide-react";
+import { ListMusic, Play, Shuffle } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useParams } from "react-router";
 import { LoadError } from "@/components/library/States";
@@ -7,13 +7,13 @@ import { Artwork, Mosaic } from "@/components/track/Artwork";
 import { SourceMark } from "@/components/track/SourceMark";
 import { TrackTable } from "@/components/track/TrackTable";
 import { Button, Icon, Skeleton } from "@/components/ui";
-import { format, strings } from "@/i18n";
+import { strings } from "@/i18n";
 import type { PlaylistDetail_Serialize as PlaylistDetail, Track_Serialize as Track } from "@/lib/bindings";
-import { commands } from "@/lib/bindings";
 import { isAppError } from "@/lib/errors";
 import { formatCount, formatTotalDuration } from "@/lib/format";
 import { usePlaylist, usePlaylistTracks } from "@/lib/queries";
 import { playTracks } from "@/lib/playback";
+import { sourceKind } from "@/lib/sources";
 
 const t = strings.pages.playlist;
 const PREFETCH_ROWS = 60;
@@ -28,13 +28,13 @@ function Header({
   play: (shuffle: boolean) => void;
 }) {
   const { playlist } = detail;
-  const provider = playlist.provider;
+  const provider = sourceKind(playlist.provider);
   const meta = [
     playlist.owner || strings.library.unisonPlaylist,
     formatCount(playlist.trackCount),
     detail.durationMs ? formatTotalDuration(detail.durationMs) : null,
   ].filter(Boolean);
-  const canPlay = detail.itemsAvailable && playlist.trackCount > 0;
+  const canPlay = playlist.trackCount > 0;
 
   return (
     <div className="flex items-end gap-6 pt-2 pb-6">
@@ -60,14 +60,6 @@ function Header({
               </Button>
             </>
           ) : null}
-          {detail.url && provider ? (
-            <Button
-              variant={canPlay ? "ghost" : "primary"}
-              onClick={() => void commands.playlistOpenExternal(playlist.id)}
-            >
-              {format(t.openIn, { provider: strings.source[provider] })} <Icon as={ExternalLink} size={12} />
-            </Button>
-          ) : null}
         </div>
       </div>
     </div>
@@ -92,8 +84,7 @@ function HeaderSkeleton() {
 export function Playlist() {
   const { id = "" } = useParams();
   const detail = usePlaylist(id);
-  const itemsAvailable = detail.data?.itemsAvailable ?? false;
-  const tracks = usePlaylistTracks(id, itemsAvailable);
+  const tracks = usePlaylistTracks(id);
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = tracks;
   const total = data?.pages[0]?.total ?? 0;
@@ -128,12 +119,6 @@ export function Playlist() {
   let body;
   if (!d) {
     body = null;
-  } else if (!d.itemsAvailable) {
-    body = (
-      <div className="flex flex-1">
-        <EmptyState icon={ListMusic} body={t.followedReason} />
-      </div>
-    );
   } else if (tracks.isError) {
     body = <LoadError error={tracks.error} onRetry={() => void tracks.refetch()} />;
   } else if (!data) {
@@ -149,9 +134,7 @@ export function Playlist() {
       <EmptyState
         icon={ListMusic}
         title={t.emptyPlaylistTitle}
-        body={format(t.emptyPlaylistBody, {
-          provider: d.playlist.provider ? strings.source[d.playlist.provider] : strings.library.unisonPlaylist,
-        })}
+        body={t.emptyPlaylistBody}
       />
     );
   } else {

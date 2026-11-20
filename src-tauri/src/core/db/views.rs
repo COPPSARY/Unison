@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 
 use crate::error::AppResult;
 use crate::core::playback::resolver::kind_of;
-use crate::model::{Album, Artist, LibrarySort, ListStats, Page, Playlist, ProviderId, Track, TrackSource};
+use crate::model::{Album, Artist, LibrarySort, ListStats, Page, Playlist, SourceKind, Track, TrackSource};
 
 /// Turns user text into a `LIKE` pattern (escaped, lowercase). `None` for empty input.
 pub fn like_pattern(filter: Option<&str>) -> Option<String> {
@@ -107,14 +107,14 @@ macro_rules! tracks_select {
 /// Liked songs page (merged across sources; one row per unified track).
 pub async fn liked(
     pool: &SqlitePool,
-    source: Option<ProviderId>,
+    source: Option<SourceKind>,
     sort: LibrarySort,
     filter: Option<&str>,
     offset: u32,
     limit: u32,
 ) -> AppResult<Page<Track>> {
     let pattern = like_pattern(filter);
-    let provider = source.map(ProviderId::as_str);
+    let provider = source.map(SourceKind::as_str);
     let sql = match sort {
         LibrarySort::DateAdded => liked_select!("added_at DESC, t.title_norm ASC"),
         LibrarySort::Title => liked_select!("t.title_norm ASC, t.artist_norm ASC"),
@@ -134,7 +134,7 @@ pub async fn liked(
 }
 
 /// Count and total duration of the (filtered) liked list.
-pub async fn liked_stats(pool: &SqlitePool, source: Option<ProviderId>, filter: Option<&str>) -> AppResult<ListStats> {
+pub async fn liked_stats(pool: &SqlitePool, source: Option<SourceKind>, filter: Option<&str>) -> AppResult<ListStats> {
     const SQL: &str = concat!(
         "SELECT COUNT(*), COALESCE(SUM(d), 0) FROM (SELECT t.id, MAX(t.duration_ms) AS d ",
         "FROM library l JOIN tracks t ON t.id = l.track_id
@@ -146,7 +146,7 @@ pub async fn liked_stats(pool: &SqlitePool, source: Option<ProviderId>, filter: 
     );
     let pattern = like_pattern(filter);
     let (count, duration): (i64, i64) = sqlx::query_as(SQL)
-        .bind(source.map(ProviderId::as_str))
+        .bind(source.map(SourceKind::as_str))
         .bind(pattern.as_deref())
         .fetch_one(pool)
         .await?;
@@ -214,22 +214,22 @@ macro_rules! albums_select {
     };
 }
 
-pub async fn albums(pool: &SqlitePool, source: Option<ProviderId>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Album>> {
+pub async fn albums(pool: &SqlitePool, source: Option<SourceKind>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Album>> {
     let sql = match sort {
         LibrarySort::DateAdded => albums_select!("l.added_at DESC, lower(a.name)"),
         LibrarySort::Title => albums_select!("lower(a.name), lower(a.artists_json)"),
         LibrarySort::Artist => albums_select!("lower(a.artists_json), a.release_date DESC"),
     };
     let rows: Vec<AlbumRow> = sqlx::query_as(sql)
-        .bind(source.map(ProviderId::as_str))
+        .bind(source.map(SourceKind::as_str))
         .bind(like_pattern(filter).as_deref())
         .fetch_all(pool)
         .await?;
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
-            Some(Album {
-                provider: ProviderId::parse(&r.provider)?,
+        .map(|r| {
+            Album {
+                provider: r.provider,
                 id: r.id,
                 item_id: r.item_id,
                 name: r.name,
@@ -237,7 +237,7 @@ pub async fn albums(pool: &SqlitePool, source: Option<ProviderId>, sort: Library
                 artwork: r.artwork_url,
                 release_date: r.release_date,
                 added_at: r.added_at,
-            })
+            }
         })
         .collect())
 }
@@ -265,26 +265,26 @@ macro_rules! artists_select {
 }
 
 /// Followed artists / subscriptions. `DateAdded` keeps the provider's follow order.
-pub async fn artists(pool: &SqlitePool, source: Option<ProviderId>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Artist>> {
+pub async fn artists(pool: &SqlitePool, source: Option<SourceKind>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Artist>> {
     let sql = match sort {
         LibrarySort::DateAdded => artists_select!("l.rowid DESC"),
         LibrarySort::Title | LibrarySort::Artist => artists_select!("a.name_norm"),
     };
     let rows: Vec<ArtistRow> = sqlx::query_as(sql)
-        .bind(source.map(ProviderId::as_str))
+        .bind(source.map(SourceKind::as_str))
         .bind(like_pattern(filter).as_deref())
         .fetch_all(pool)
         .await?;
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
-            Some(Artist {
-                provider: ProviderId::parse(&r.provider)?,
+        .map(|r| {
+            Artist {
+                provider: r.provider,
                 id: r.id,
                 item_id: r.item_id,
                 name: r.name,
                 artwork: r.artwork_url,
-            })
+            }
         })
         .collect())
 }
@@ -315,14 +315,14 @@ macro_rules! playlists_select {
 
 /// Playlists from every source plus Unison playlists (`provider` NULL). `DateAdded` = most
 /// recently synced/created first; `Artist` sorts by owner.
-pub async fn playlists(pool: &SqlitePool, source: Option<ProviderId>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Playlist>> {
+pub async fn playlists(pool: &SqlitePool, source: Option<SourceKind>, sort: LibrarySort, filter: Option<&str>) -> AppResult<Vec<Playlist>> {
     let sql = match sort {
         LibrarySort::DateAdded => playlists_select!("rowid ASC"),
         LibrarySort::Title => playlists_select!("lower(name)"),
         LibrarySort::Artist => playlists_select!("lower(COALESCE(owner, '')), lower(name)"),
     };
     let rows: Vec<PlaylistRow> = sqlx::query_as(sql)
-        .bind(source.map(ProviderId::as_str))
+        .bind(source.map(SourceKind::as_str))
         .bind(like_pattern(filter).as_deref())
         .fetch_all(pool)
         .await?;
@@ -330,7 +330,7 @@ pub async fn playlists(pool: &SqlitePool, source: Option<ProviderId>, sort: Libr
         .into_iter()
         .map(|r| Playlist {
             id: r.id,
-            provider: r.provider.as_deref().and_then(ProviderId::parse),
+            provider: r.provider,
             name: r.name,
             owner: r.owner.unwrap_or_default(),
             track_count: u32::try_from(r.track_count).unwrap_or(0),
@@ -349,7 +349,7 @@ mod tests {
     fn track(id: &str, title: &str, artist: &str, dur: u32) -> TrackInput {
         TrackInput {
             item_id: id.into(),
-            url: format!("https://open.spotify.com/track/{id}"),
+            url: format!("https://music.example/track/{id}"),
             title: title.into(),
             artists: vec![artist.into()],
             album: Some(format!("{artist} album")),
@@ -364,7 +364,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let pool = db::open(&dir.path().join(db::DB_FILE)).await.unwrap();
         let mut c = pool.acquire().await.unwrap();
-        let p = ProviderId::Spotify;
+        let p = "extension";
         for (i, (id, title, artist)) in [("t1", "Bravo", "Zed"), ("t2", "alpha 100%", "Mia"), ("t3", "Charlie", "Ann")].iter().enumerate() {
             let tid = lib::upsert_track(&mut c, p, &track(id, title, artist, 1000 * (i as u32 + 1)), 0).await.unwrap();
             lib::upsert_library(&mut c, p, LibraryKind::Liked, id, Some(&tid), Some(100 + i as i64)).await.unwrap();
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(titles(&liked(&pool, None, LibrarySort::Title, Some("MIA"), 0, 50).await.unwrap()), vec!["alpha 100%"]);
         assert_eq!(liked(&pool, None, LibrarySort::Title, Some("100%"), 0, 50).await.unwrap().total, 1);
         assert_eq!(liked(&pool, None, LibrarySort::Title, Some("%"), 0, 50).await.unwrap().total, 1);
-        assert_eq!(liked(&pool, Some(ProviderId::Youtube), LibrarySort::Title, None, 0, 50).await.unwrap().total, 0);
+        assert_eq!(liked(&pool, Some(SourceKind::Audius), LibrarySort::Title, None, 0, 50).await.unwrap().total, 0);
 
         let stats = liked_stats(&pool, None, None).await.unwrap();
         assert_eq!((stats.count, stats.duration_ms), (3, 6000.0));
@@ -433,7 +433,7 @@ mod tests {
             artwork_path: None,
             artwork_url: None,
         };
-        // "Bravo" by Zed is already liked on Spotify (seeded): the file merges into it.
+        // "Bravo" by Zed is already liked through an extension (seeded): the file merges into it.
         store(&mut c, &mut index, &file("fp1", "Bravo", "Zed"), 10).await.unwrap();
         store(&mut c, &mut index, &file("fp2", "Delta", "Nobody"), 20).await.unwrap();
         drop(c);
@@ -444,7 +444,7 @@ mod tests {
         let bravo = &page.items[1];
         let mut kinds: Vec<_> = bravo.sources.iter().map(|s| s.provider).collect();
         kinds.sort_by_key(|k| format!("{k:?}"));
-        assert_eq!(kinds, vec![SourceKind::Local, SourceKind::Spotify]);
+        assert_eq!(kinds, vec![SourceKind::Extension, SourceKind::Local]);
         assert_eq!(local(&pool, LibrarySort::Title, Some("delt"), 0, 50).await.unwrap().total, 1);
         let stats = local_stats(&pool, None).await.unwrap();
         assert_eq!(stats.count, 2);
@@ -459,7 +459,7 @@ mod tests {
         assert_eq!(a.len(), 1);
         assert_eq!(a[0].artists, vec!["Zed"]);
         assert!(albums(&pool, None, LibrarySort::Title, Some("nope")).await.unwrap().is_empty());
-        let ar = artists(&pool, Some(ProviderId::Spotify), LibrarySort::Title, Some("ze")).await.unwrap();
+        let ar = artists(&pool, Some(SourceKind::Extension), LibrarySort::Title, Some("ze")).await.unwrap();
         assert_eq!(ar.len(), 1);
         let pl = playlists(&pool, None, LibrarySort::Title, None).await.unwrap();
         assert_eq!((pl.len(), pl[0].track_count, pl[0].editable), (1, 7, true));

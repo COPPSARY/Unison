@@ -10,7 +10,7 @@ use tauri_specta::Event;
 
 use super::import::{self, ImportConfig};
 use super::{ImportReporter, LocalChanged, LocalImportProgress};
-use crate::core::auth::oauth::now_unix;
+use crate::core::now_unix;
 use crate::core::db;
 use crate::model::WatchedFolder;
 use crate::error::{AppError, AppResult};

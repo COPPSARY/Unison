@@ -2,11 +2,9 @@ import {
   QueryClient,
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
-  useQueryClient,
 } from "@tanstack/react-query";
-import { commands, type LibrarySort, type ProviderId } from "@/lib/bindings";
+import { commands, type LibrarySort, type SourceKind } from "@/lib/bindings";
 import { isTauri } from "@/lib/window";
 
 /** One client for the app. Commands read the local DB, so data stays fresh until invalidated. */
@@ -29,9 +27,9 @@ export function createQueryClient(): QueryClient {
 
 export const queryKeys = {
   appInfo: ["appInfo"] as const,
-  accounts: ["accounts"] as const,
-  spotifyHasClientId: ["spotify", "hasClientId"] as const,
-  spotifyRedirectUris: ["spotify", "redirectUris"] as const,
+  extensions: ["extensions", "list"] as const,
+  registries: ["extensions", "registries"] as const,
+  registry: (url: string) => ["extensions", "registry", url] as const,
 };
 
 /** Queries are disabled outside Tauri (plain browser preview). */
@@ -42,60 +40,12 @@ export function useAppInfo() {
   return useQuery({ queryKey: queryKeys.appInfo, queryFn: () => commands.appInfo(), enabled: enabled() });
 }
 
-export function useAccounts() {
-  return useQuery({
-    queryKey: queryKeys.accounts,
-    queryFn: () => commands.accountsList(),
-    enabled: enabled(),
-  });
-}
-
-export function useSpotifyHasClientId() {
-  return useQuery({
-    queryKey: queryKeys.spotifyHasClientId,
-    queryFn: () => commands.spotifyHasClientId(),
-    enabled: enabled(),
-  });
-}
-
-export function useSpotifyRedirectUris() {
-  return useQuery({
-    queryKey: queryKeys.spotifyRedirectUris,
-    queryFn: () => commands.spotifyRedirectUris(),
-    enabled: enabled(),
-  });
-}
-
-/** Saves the Client ID (if given) and runs the browser login. */
-export function useConnectSpotify() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (clientId: string | null) => {
-      if (clientId) await commands.spotifySetClientId(clientId);
-      return commands.accountConnect("spotify" satisfies ProviderId);
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: queryKeys.accounts });
-      void qc.invalidateQueries({ queryKey: queryKeys.spotifyHasClientId });
-    },
-  });
-}
-
-/** Starts a background sync (all connected providers when `provider` is null). */
-export function useSyncNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (provider: ProviderId | null) => commands.syncNow(provider),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: queryKeys.accounts }),
-  });
-}
-
 // ---------------------------------------------------------------- Library views
 
 /** Rows per liked-songs request; the table asks for more as you scroll. */
 export const LIKED_PAGE = 300;
 
-export type LibraryArgs = { provider: ProviderId | null; sort: LibrarySort; query: string };
+export type LibraryArgs = { provider: SourceKind | null; sort: LibrarySort; query: string };
 
 const filterArg = (q: string) => (q ? q : null);
 
@@ -111,7 +61,7 @@ export function useLikedTracks({ provider, sort, query }: LibraryArgs) {
   });
 }
 
-export function useLikedStats(provider: ProviderId | null, query: string) {
+export function useLikedStats(provider: SourceKind | null, query: string) {
   return useQuery({
     queryKey: ["likedStats", provider, query],
     queryFn: () => commands.libraryLikedStats(provider, filterArg(query)),
@@ -187,30 +137,74 @@ export function usePlaylist(id: string) {
   });
 }
 
-/** Items in playlist order. The first page may load them from the platform (lazy, T-15). */
-export function usePlaylistTracks(id: string, itemsAvailable: boolean) {
-  const qc = useQueryClient();
+/** Items in playlist order. */
+export function usePlaylistTracks(id: string) {
   return useInfiniteQuery({
     queryKey: ["playlistTracks", id],
-    queryFn: async ({ pageParam }) => {
-      const page = await commands.playlistTracks(id, pageParam, LIKED_PAGE);
-      // The first load may have fetched items and updated count/duration.
-      if (pageParam === 0) void qc.invalidateQueries({ queryKey: ["playlist", id] });
-      return page;
-    },
+    queryFn: ({ pageParam }) => commands.playlistTracks(id, pageParam, LIKED_PAGE),
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextOffset ?? undefined,
-    enabled: enabled() && itemsAvailable,
+    enabled: enabled(),
   });
 }
 
 // ---------------------------------------------------------------- Player
 
-export function useSpotifyCapabilities(connected: boolean) {
+// ---------------------------------------------------------------- Extensions
+
+/** Installed extensions. */
+export function useExtensions() {
   return useQuery({
-    queryKey: ["spotifyCapabilities"],
-    queryFn: () => commands.spotifyCapabilities(false),
-    enabled: enabled() && connected,
-    staleTime: 30_000,
+    queryKey: queryKeys.extensions,
+    queryFn: () => commands.extensionList(),
+    enabled: enabled(),
+  });
+}
+
+/** Registry links the user added. */
+export function useRegistries() {
+  return useQuery({
+    queryKey: queryKeys.registries,
+    queryFn: () => commands.extensionRegistries(),
+    enabled: enabled(),
+  });
+}
+
+/** What one saved registry lists (each entry previewed; nothing installed). */
+export function useRegistry(url: string) {
+  return useQuery({
+    queryKey: queryKeys.registry(url),
+    queryFn: () => commands.extensionRegistry(url),
+    enabled: enabled(),
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** One merged song list from every enabled extension; `query` should already be debounced. */
+export function useSearchAll(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["extensions", "search", "all", q],
+    queryFn: () => commands.extensionSearchAll(q),
+    enabled: enabled() && q.length > 0,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** A song's track page (by any of its source keys). */
+export function useSong(key: string) {
+  return useQuery({ queryKey: ["song", key], queryFn: () => commands.extensionSong(key), enabled: enabled() });
+}
+
+/** Searches every enabled extension; `query` should already be debounced. */
+export function useExtensionSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["extensions", "search", q],
+    queryFn: () => commands.extensionSearch(q),
+    enabled: enabled() && q.length > 0,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }

@@ -1,12 +1,8 @@
 import { useDeferredValue, useState } from "react";
 import { strings } from "@/i18n";
-import type { LibrarySort, ProviderId } from "@/lib/bindings";
-
-export type SourceFilter = "all" | ProviderId;
+import type { LibrarySort, SourceKind } from "@/lib/bindings";
 
 export type LibraryControls = {
-  source: SourceFilter;
-  setSource: (s: SourceFilter) => void;
   /** Raw input value. */
   filter: string;
   setFilter: (f: string) => void;
@@ -14,24 +10,21 @@ export type LibraryControls = {
   query: string;
   sort: LibrarySort;
   setSort: (s: LibrarySort) => void;
-  /** Provider for commands (`null` = all). */
-  provider: ProviderId | null;
+  /** Source for commands (`null` = all). */
+  provider: SourceKind | null;
 };
 
 export function useLibraryControls(defaultSort: LibrarySort = "dateAdded"): LibraryControls {
-  const [source, setSource] = useState<SourceFilter>("all");
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<LibrarySort>(defaultSort);
   const query = useDeferredValue(filter.trim());
   return {
-    source,
-    setSource,
     filter,
     setFilter,
     query,
     sort,
     setSort,
-    provider: source === "all" ? null : source,
+    provider: null,
   };
 }
 

@@ -16,14 +16,14 @@
     "source": "Source",
     "more": "More",
     "ok": "OK",
-    "goToSettings": "Open Settings"
+    "goToSettings": "Open Settings",
+    "justNow": "just now"
   },
   "source": {
     "all": "All",
-    "spotify": "Spotify",
-    "youtube": "YouTube",
     "local": "This PC",
-    "audius": "Audius"
+    "audius": "Audius",
+    "extension": "Extension"
   },
   "sort": {
     "dateAdded": "Date added",
@@ -45,7 +45,6 @@
     "expand": "Expand",
     "seek": "Seek",
     "playerBar": "Player",
-    "youtubeVideo": "YouTube video",
     "openIn": "Open in {provider}",
     "fallback": "Playing from {to}. {from} isn't available right now.",
     "playingFrom": "Playing from {provider}",
@@ -57,50 +56,12 @@
   "track": {
     "addToPlaylist": "Add to playlist",
     "addToQueue": "Add to queue",
-    "openInSpotify": "Open in Spotify",
     "notTheSameSong": "Not the same song",
     "removeFromPlaylist": "Remove from playlist"
   },
-  "accounts": {
-    "connectSpotify": "Connect Spotify",
-    "connectYoutube": "Connect YouTube",
-    "connect": "Connect",
-    "disconnect": "Disconnect",
-    "reconnect": "Reconnect",
-    "disconnectSpotifyTitle": "Disconnect Spotify?",
-    "disconnectSpotifyBody": "Your Spotify library will be removed from Unison. Nothing changes on Spotify.",
-    "byokTitle": "Connect Spotify",
-    "byokStep1": "Create an app in the Spotify Developer Dashboard and tick Web API.",
-    "byokStep2": "Add these redirect URIs to the app, then save it.",
-    "byokStep3": "Paste the app's Client ID.",
-    "openDashboard": "Open Developer Dashboard",
-    "clientId": "Client ID",
-    "invalidClientId": "That doesn't look like a Spotify Client ID.",
-    "section": "Accounts",
-    "statusConnected": "Connected",
-    "statusNotConnected": "Not connected",
-    "statusNeedsReconnect": "Reconnect needed",
-    "statusSyncing": "Syncing",
-    "youtubeLater": "Available in a later update",
-    "byokUsers": "In the app's User Management, add the email of the Spotify account you'll sign in with.",
-    "clientIdSaved": "A Client ID is saved. Paste a new one to replace it.",
-    "copy": "Copy",
-    "copied": "Copied",
-    "waiting": "Approve Unison in your browser to finish.",
-    "waitingHint": "Seeing INVALID_CLIENT in the browser? Check the Client ID, and that all three redirect URIs are added to the app exactly as shown.",
-    "cancel": "Cancel",
-    "connectedToast": "Spotify connected",
-    "connectedAs": "Connected as {name}",
-    "clientIdRequired": "Paste your Client ID first."
-  },
   "feedback": {
     "offline": "You're offline. Showing your saved library.",
-    "quotaExhausted": "YouTube daily limit reached. Resets at {time}.",
-    "spotifyExpired": "Spotify needs you to sign in again.",
-    "syncFinished": "Sync finished",
-    "syncFinishedBody": "{count} new tracks",
     "addedToPlaylist": "Added to {name}",
-    "syncFailed": "Couldn't sync YouTube",
     "searchPlaceholder": "Search your library"
   },
   "devUi": {
@@ -157,7 +118,25 @@
     "sampleTitle": "Sample track",
     "sampleArtist": "Sample artist",
     "glassButton": "Glass",
-    "large": "Large"
+    "large": "Large",
+    "sampleRemove": "Remove",
+    "sampleField": "Registry link",
+    "sampleInvalid": "That isn't a registry link.",
+    "sampleDialogTitle": "Remove Mock Stream?",
+    "sampleDialogBody": "Its songs stay in your library but won't play until you install it again.",
+    "sampleDrawerTitle": "Add a registry",
+    "sampleDrawerStep1": "Find a registry.json for the extensions you want.",
+    "sampleDrawerStep2": "Copy its raw link.",
+    "sampleDrawerStep3": "Paste it here.",
+    "sampleOpenSite": "Open website",
+    "sampleAdd": "Add",
+    "sampleToast": "Extension installed",
+    "sampleToastBody": "{count} new songs in Search",
+    "sampleErrorToast": "Couldn't install the extension",
+    "sampleWarning": "Mock Stream is off. Turn it on to play its songs.",
+    "sampleDanger": "Mock Stream stopped answering.",
+    "sampleRetry": "Retry",
+    "sampleOpenDetails": "Extension details"
   },
   "nav": {
     "listen": "Listen",
@@ -175,7 +154,8 @@
     "noPlaylists": "Playlists you make or follow appear here.",
     "back": "Back",
     "forward": "Forward",
-    "sidebar": "Sidebar"
+    "sidebar": "Sidebar",
+    "extensions": "Extensions"
   },
   "window": {
     "minimize": "Minimize",
@@ -183,36 +163,42 @@
     "restore": "Restore",
     "close": "Close"
   },
-  "account": {
-    "notConnected": "No account connected",
-    "connect": "Connect an account",
-    "connectedTo": "{provider} · {name}"
-  },
   "pages": {
     "home": {
       "title": "Home",
-      "emptyTitle": "Connect a music account to fill Home",
-      "emptyBody": "Unison builds picks from your Spotify and YouTube libraries."
+      "emptyTitle": "Add an extension to start listening",
+      "emptyBody": "Extensions bring music sources to Unison. Browse a registry or paste an extension link."
     },
     "search": {
       "title": "Search",
       "placeholder": "Songs, artists, albums",
-      "emptyBody": "Search your library, then Spotify and YouTube."
+      "emptyBody": "Search your library and your extensions.",
+      "searching": "Searching…",
+      "noResults": "No results for “{query}”",
+      "retry": "Retry",
+      "songs": "Songs",
+      "playSong": "Play {title}",
+      "openSong": "Open {title}",
+      "sourceCount": "{count} sources",
+      "sourceCountOne": "1 source",
+      "failed": "{name} didn't answer: {reason}",
+      "noExtensions": "Add an extension to search for music.",
+      "noExtensionsAction": "Browse extensions"
     },
     "liked": {
       "title": "Liked songs",
       "emptyTitle": "No liked songs yet",
-      "emptyBody": "Songs you like on Spotify or YouTube show up here after you connect."
+      "emptyBody": "Songs you like show up here."
     },
     "albums": {
       "title": "Albums",
       "emptyTitle": "No saved albums yet",
-      "emptyBody": "Albums you save on Spotify show up here."
+      "emptyBody": "Albums you save show up here."
     },
     "playlists": {
       "title": "Playlists",
       "emptyTitle": "No playlists yet",
-      "emptyBody": "Playlists from Spotify and YouTube show up here."
+      "emptyBody": "Playlists you make show up here."
     },
     "artists": {
       "title": "Artists",
@@ -236,53 +222,74 @@
     "playlist": {
       "title": "Playlist",
       "emptyTitle": "Playlist not found",
-      "emptyBody": "It may have been removed, or your library hasn't synced yet.",
+      "emptyBody": "It may have been removed.",
       "openIn": "Open in {provider}",
-      "followedReason": "Spotify only shares the songs of playlists you own or collaborate on. Open it in Spotify to listen.",
       "emptyPlaylistTitle": "This playlist is empty",
-      "emptyPlaylistBody": "Songs added on {provider} show up here after the next sync.",
+      "emptyPlaylistBody": "Add songs to this playlist to see them here.",
       "loadingItems": "Loading songs…",
       "songCountUnknown": "{count} songs"
     },
     "album": {
       "title": "Album",
       "emptyTitle": "Album not found",
-      "emptyBody": "It may have been removed, or your library hasn't synced yet."
+      "emptyBody": "It may have been removed."
     },
     "artist": {
       "title": "Artist",
       "emptyTitle": "Artist not found",
-      "emptyBody": "It may have been removed, or your library hasn't synced yet."
+      "emptyBody": "It may have been removed."
     },
     "settings": {
       "title": "Settings",
-      "emptyBody": "Accounts, playback, appearance and data settings arrive in upcoming updates."
+      "emptyBody": "Playback, appearance and data settings arrive in upcoming updates."
+    },
+    "track": {
+      "title": "Song",
+      "notFoundTitle": "Song not found",
+      "notFoundBody": "Search for it again to open it.",
+      "back": "Back",
+      "play": "Play",
+      "like": "Like",
+      "unlike": "Remove from Liked songs",
+      "liked": "Added to Liked songs",
+      "unliked": "Removed from Liked songs",
+      "tabsLabel": "Song sections",
+      "sources": "Sources",
+      "details": "Details",
+      "sourcesHint": "Pick where Unison plays this song from, and at what quality.",
+      "playFrom": "Play from {name}",
+      "quality": "Quality on {name}",
+      "defaultQuality": "Default",
+      "cantPlay": "Can't play in Unison",
+      "noSources": "None of your extensions that have this song are on.",
+      "album": "Album",
+      "artists": "Artists",
+      "length": "Length",
+      "isrc": "ISRC",
+      "sourceCount": "Sources",
+      "unknown": "Unknown"
     }
   },
   "errors": {
     "offline": "You are offline. Check your connection and try again.",
-    "authCancelled": "Sign-in was cancelled. Try connecting again.",
-    "authTimeout": "Sign-in timed out. Try connecting again.",
-    "needsReconnect": "Your account needs to sign in again. Reconnect it in Settings.",
-    "invalidClientId": "That Client ID was not accepted. Copy it again from the Spotify dashboard.",
-    "redirectUriMismatch": "The redirect URIs do not match. Add the exact URIs shown, then try again.",
-    "spotifyPremiumRequired": "Playback needs Spotify Premium.",
-    "noSpotifyDevice": "Open Spotify on this PC or your phone, then pick it here.",
     "rateLimited": "Too many requests. Try again in {seconds} s.",
-    "youtubeQuotaExceeded": "YouTube daily limit reached. Resets at {time}.",
-    "notEmbeddable": "This video can't be played outside YouTube. Open it on YouTube instead.",
     "notFound": "That item is no longer available.",
     "upstream": "The service had a problem ({status}). Try again in a moment.",
     "internal": "Something went wrong. Try again; if it keeps happening, restart Unison.",
     "unknown": "Something went wrong. Try again.",
-    "userNotRegistered": "This Spotify account isn't added to your developer app. Add its email under User Management in the Spotify dashboard, then connect again.",
-    "noPlayableSource": "This song can't play from any connected source here. Open it in its app instead.",
+    "noPlayableSource": "This song can't play from any source here. Check that its extension is on.",
     "fileMissing": "The file was moved or deleted. Use Locate file to find it.",
     "unsupportedFormat": "Unison can't play this file type.",
     "drmProtected": "This file is copy-protected (DRM) and can't be played.",
     "audiusUnavailable": "Audius isn't reachable right now. Try again in a moment.",
-    "youtubeEmbedBlocked": "YouTube won't let this video play outside YouTube (error {code}).",
-    "outputDeviceUnavailable": "That audio output isn't available. Pick another one in Settings."
+    "outputDeviceUnavailable": "That audio output isn't available. Pick another one in Settings.",
+    "extensionLinkInvalid": "That isn't a link to an extension. Paste a GitHub repository, folder, extension.json, manifest.json or registry.json link, or a link to a package file.",
+    "extensionInvalid": "That extension isn't valid. Ask its author to fix it.",
+    "extensionHostNotAllowed": "The extension tried to reach a site it didn't declare, so Unison blocked it.",
+    "extensionDisabled": "This extension is off or removed. Turn it on in Settings → Extensions.",
+    "extensionFailed": "The extension's service sent something Unison couldn't use. Try again later.",
+    "extensionRegistryInvalid": "That registry.json isn't valid or lists no extensions. Ask its author to fix it.",
+    "extensionUnsupported": "Can't do that with this extension: it isn't an installable link, or it can't play in Unison."
   },
   "settings": {
     "about": "About",
@@ -308,50 +315,11 @@
       "lastScan": "Last scan {when}",
       "loadError": "Couldn't load your folders"
     },
-    "youtube": {
-      "title": "YouTube player",
-      "test": "Test playback",
-      "testing": "Testing…",
-      "ok": "YouTube playback works on this PC.",
-      "close": "Close player"
-    },
-    "spotifyPlayback": {
-      "title": "Spotify",
-      "ready": "Ready",
-      "needsPremium": "Needs Premium",
-      "noDevice": "Open Spotify on this PC or your phone",
-      "unknown": "Open Spotify to check Premium",
-      "notConnected": "Not connected",
-      "refresh": "Refresh",
-      "active": "Active",
-      "restricted": "Can't be controlled",
-      "devices": "Devices"
-    },
     "output": {
       "title": "Output",
       "systemDefault": "System default",
       "test": "Test sound"
     }
-  },
-  "sync": {
-    "syncNow": "Sync now",
-    "cancel": "Stop sync",
-    "stage": {
-      "profile": "Connecting",
-      "liked": "Syncing liked songs",
-      "playlists": "Syncing playlists",
-      "albums": "Syncing albums",
-      "artists": "Syncing artists",
-      "taste": "Learning your taste"
-    },
-    "progress": "{stage} · {done} of {total}",
-    "finished": "Sync finished",
-    "finishedBody": "{added} new, {removed} removed",
-    "upToDate": "Your library is up to date",
-    "failed": "Sync didn't finish",
-    "lastSynced": "Synced {when}",
-    "never": "Not synced yet",
-    "justNow": "just now"
   },
   "library": {
     "songCount": "{count} songs",
@@ -419,5 +387,95 @@
     "removedOne": "1 song removed",
     "removedBody": "Their files were deleted from a watched folder.",
     "upToDate": "Library is up to date"
+  },
+  "extensions": {
+    "title": "Extensions",
+    "hint": "Paste a registry link to browse its extensions, or a link to one extension (GitHub or a package file).",
+    "linkLabel": "Registry or extension link",
+    "linkPlaceholder": "https://raw.githubusercontent.com/owner/repo/main/registry.json",
+    "check": "Check",
+    "checking": "Checking…",
+    "previewTitle": "Install {name}?",
+    "by": "By {author}",
+    "version": "Version {version}",
+    "replaces": "Replaces installed version {version}",
+    "commit": "Commit {sha}",
+    "packageHash": "Package {sha}",
+    "adds": "Adds {what}.",
+    "capSearch": "search results",
+    "capPlay": "playback",
+    "addsNothing": "Adds nothing Unison can use: it only downloads files or offers features Unison doesn't have.",
+    "runsCode": "Runs its own code in Unison's sandbox. It can only reach the sites below and can't touch your files.",
+    "runsCodeShort": "Runs code",
+    "hosts": "It will connect to",
+    "trust": "Only install extensions you trust that have the rights to the music they stream.",
+    "install": "Install",
+    "installing": "Installing…",
+    "cancel": "Cancel",
+    "registryCount": "{count} extensions in this registry.",
+    "registryCountOne": "1 extension in this registry.",
+    "registryList": "Extensions in this registry",
+    "connectsTo": "Connects to {hosts}",
+    "installedAlready": "Installed",
+    "installName": "Install {name}",
+    "update": "Update",
+    "updateName": "Update {name}",
+    "updateFrom": "Version {from} installed · {to} available",
+    "closeList": "Close list",
+    "noneInstallable": "None of these can be installed. Unison installs GitHub extensions and package files.",
+    "unnamed": "Unnamed entry",
+    "empty": "No extensions yet",
+    "loadError": "Couldn't load your extensions",
+    "enable": "Use {name}",
+    "remove": "Remove {name}",
+    "off": "Off",
+    "add": "Add",
+    "adding": "Adding…",
+    "installedTitle": "Installed",
+    "noInstalled": "Nothing installed yet. Install an extension from a registry below, or paste its link.",
+    "registryTitle": "From {name}",
+    "removeRegistry": "Remove registry {name}",
+    "registryLoading": "Reading registry…",
+    "registryError": "Couldn't read this registry",
+    "emptyTitle": "No extensions yet",
+    "emptyBody": "Paste a registry link above to browse extensions you can add.",
+    "openDetails": "Details for {name}",
+    "notInstallable": "Can't install",
+    "notFoundTitle": "Extension not found",
+    "notFoundBody": "It isn't installed and none of your registries lists it.",
+    "backToList": "All extensions",
+    "about": "About",
+    "noDescription": "The author didn't write a description.",
+    "tags": "Tags",
+    "information": "Information",
+    "capabilities": "Capabilities",
+    "inUnison": "In Unison",
+    "infoVersion": "Version",
+    "infoAuthor": "Author",
+    "infoCategory": "Category",
+    "infoHomepage": "Website",
+    "infoSource": "Installs from",
+    "infoPinned": "Pinned to",
+    "infoHosts": "Connects to",
+    "infoNoHosts": "No sites",
+    "infoCode": "Runs code",
+    "infoInstalled": "Installed",
+    "infoRegistry": "Listed in",
+    "yes": "Yes, in Unison's sandbox",
+    "no": "No",
+    "unknown": "Unknown",
+    "typeMetadata": "Metadata provider",
+    "typeMetadataBody": "Finds songs and their details.",
+    "typeDownload": "Download provider",
+    "typeDownloadBody": "Saves songs as files. Unison doesn't download, so it uses only the stream link when there is one.",
+    "typeLyrics": "Lyrics provider",
+    "typeLyricsBody": "Supplies lyrics. Unison doesn't show lyrics yet.",
+    "typeOther": "{type}",
+    "typeOtherBody": "Not used by Unison yet.",
+    "noTypes": "The extension doesn't say what it provides.",
+    "canSearch": "Shows its songs in Search",
+    "canPlay": "Plays its songs",
+    "cannot": "Adds nothing Unison can use yet",
+    "enabled": "On"
   }
 }

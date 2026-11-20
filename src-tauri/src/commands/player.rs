@@ -1,4 +1,4 @@
-//! Player commands. Engine and resolver logic lives in `core::playback` / `providers/`.
+//! Player commands. Engine and resolver logic lives in `core::playback`.
 
 use tauri::{AppHandle, Manager, State};
 
@@ -10,32 +10,7 @@ use crate::core::playback::service::{PlayerAction, PlayerStateEvent};
 use crate::model::SourceKind;
 use tauri_plugin_opener::OpenerExt;
 use crate::error::{AppError, AppResult};
-use crate::providers::spotify::player::{self, SpotifyCapabilities};
 use crate::state::AppState;
-
-/// Spotify Premium (cached 1 h when known) and the current Spotify Connect devices.
-#[tauri::command]
-#[specta::specta]
-pub async fn spotify_capabilities(state: State<'_, AppState>, refresh: bool) -> AppResult<SpotifyCapabilities> {
-    if refresh {
-        state.spotify_premium.clear();
-    }
-    player::capabilities(&state.spotify, &state.spotify_premium).await
-}
-
-/// Chooses the Spotify Connect device to play on (`None` = active / first available).
-#[tauri::command]
-#[specta::specta]
-pub fn spotify_set_device(state: State<'_, AppState>, device_id: Option<String>) {
-    state.spotify_engine.set_device(device_id);
-}
-
-/// The chosen Spotify Connect device, if any.
-#[tauri::command]
-#[specta::specta]
-pub fn spotify_chosen_device(state: State<'_, AppState>) -> Option<String> {
-    state.spotify_engine.chosen_device()
-}
 
 /// Audio output devices for the NativeEngine (Settings → Playback → Output).
 #[tauri::command]
@@ -115,7 +90,7 @@ pub async fn player_sources(state: State<'_, AppState>, track_id: String) -> App
     state.player.sources(&track_id).await
 }
 
-/// Opens a track on its platform (e.g. Open in Spotify when it can't play here).
+/// Opens a track's web page (when it can't play here).
 #[tauri::command]
 #[specta::specta]
 pub async fn track_open_external(

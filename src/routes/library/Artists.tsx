@@ -6,6 +6,7 @@ import { Empty, GridSkeleton, LoadError, NoResults } from "@/components/library/
 import { Page } from "@/components/shell/Page";
 import { strings } from "@/i18n";
 import { useArtists } from "@/lib/queries";
+import { sourceKind } from "@/lib/sources";
 
 const t = strings.pages.artists;
 
@@ -19,7 +20,7 @@ export function Artists() {
   const controls = useLibraryControls();
   const artists = useArtists({ provider: controls.provider, sort: controls.sort, query: controls.query });
   const all = useArtists({ provider: null, sort: "dateAdded", query: "" });
-  const filtered = controls.query !== "" || controls.source !== "all";
+  const filtered = controls.query !== "";
 
   if (all.data && all.data.length === 0) {
     return (
@@ -39,7 +40,6 @@ export function Artists() {
         query={controls.query}
         onClear={() => {
           controls.setFilter("");
-          controls.setSource("all");
         }}
       />
     );
@@ -50,7 +50,7 @@ export function Artists() {
           id: a.id,
           href: `/artist/${a.id}`,
           title: a.name,
-          meta: strings.source[a.provider],
+          meta: strings.source[sourceKind(a.provider) ?? "extension"],
           artwork: a.artwork,
           provider: null,
           kind: "artist",

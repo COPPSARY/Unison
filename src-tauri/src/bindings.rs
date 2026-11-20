@@ -12,10 +12,8 @@ use crate::core::local::{LocalChanged, LocalImportProgress};
 use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::player::PlayerSnapshot;
 use crate::core::playback::service::{PlayerFallback, PlayerStateEvent};
-use crate::core::playback::youtube::YoutubeCommand;
-use crate::core::sync::{SyncFinished, SyncProgress};
 use crate::error::AppError;
-use crate::model::{Account, Playlist, Signal, Track};
+use crate::model::{Playlist, Track};
 
 /// Path of the generated file, relative to `src-tauri/`.
 pub const BINDINGS_PATH: &str = "../src/lib/bindings.ts";
@@ -28,15 +26,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::app::app_info,
             commands::settings::settings_get,
             commands::settings::settings_set,
-            commands::accounts::accounts_list,
-            commands::accounts::spotify_set_client_id,
-            commands::accounts::spotify_has_client_id,
-            commands::accounts::spotify_redirect_uris,
-            commands::accounts::spotify_open_dashboard,
-            commands::accounts::account_connect,
-            commands::accounts::account_cancel_connect,
-            commands::sync::sync_now,
-            commands::sync::sync_cancel,
             commands::library::library_liked,
             commands::library::library_liked_stats,
             commands::library::library_local,
@@ -46,14 +35,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::playlists_list,
             commands::playlists::playlist_get,
             commands::playlists::playlist_tracks,
-            commands::playlists::playlist_open_external,
-            commands::youtube::youtube_test_playback,
-            commands::youtube::youtube_test_report,
-            commands::youtube::youtube_player_report,
-            commands::youtube::youtube_host_ready,
-            commands::player::spotify_capabilities,
-            commands::player::spotify_set_device,
-            commands::player::spotify_chosen_device,
             commands::player::player_play,
             commands::player::player_control,
             commands::player::player_state,
@@ -73,11 +54,23 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::local::local_folder_remove,
             commands::local::local_rescan,
             commands::local::local_locate,
+            commands::extensions::extension_list,
+            commands::extensions::extension_preview,
+            commands::extensions::extension_registry,
+            commands::extensions::extension_registries,
+            commands::extensions::extension_registry_add,
+            commands::extensions::extension_registry_remove,
+            commands::extensions::extension_install,
+            commands::extensions::extension_set_enabled,
+            commands::extensions::extension_remove,
+            commands::extensions::extension_search,
+            commands::extensions::extension_save_tracks,
+            commands::extensions::extension_search_all,
+            commands::extensions::extension_song,
+            commands::extensions::extension_play_song,
+            commands::extensions::extension_like_song,
         ])
         .events(collect_events![
-            SyncProgress,
-            SyncFinished,
-            YoutubeCommand,
             PlayerStateEvent,
             PlayerFallback,
             LocalImportProgress,
@@ -85,10 +78,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             LocalDrag
         ])
         .typ::<AppError>()
-        .typ::<Account>()
         .typ::<Track>()
         .typ::<Playlist>()
-        .typ::<Signal>()
         .typ::<SourceStatus>()
         .typ::<PlayerSnapshot>()
         // Unix-second timestamps fit comfortably in a JS number.

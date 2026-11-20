@@ -15,61 +15,18 @@ export const commands = {
 	settingsGet: (options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_get", undefined, options),
 	/**  Saves settings and returns the stored (sanitised) value. */
 	settingsSet: (settings: Settings_Deserialize, options?: InvokeOptions) => __TAURI_INVOKE<Settings_Serialize>("settings_set", { settings }, options),
-	/**  One entry per provider with its status. */
-	accountsList: (options?: InvokeOptions) => __TAURI_INVOKE<Account_Serialize[]>("accounts_list", undefined, options),
-	/**  Validates and stores the Spotify Client ID in the keychain. Never echoed back. */
-	spotifySetClientId: (clientId: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("spotify_set_client_id", { clientId }, options),
-	/**  Whether a Spotify Client ID is saved (the UI never sees the value). */
-	spotifyHasClientId: (options?: InvokeOptions) => __TAURI_INVOKE<boolean>("spotify_has_client_id", undefined, options),
-	/**  Spotify onboarding: redirect URIs to register in the developer app. */
-	spotifyRedirectUris: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("spotify_redirect_uris", undefined, options),
-	/**  Opens the Spotify Developer Dashboard in the default browser. */
-	spotifyOpenDashboard: (options?: InvokeOptions) => __TAURI_INVOKE<null>("spotify_open_dashboard", undefined, options),
-	/**  Runs the interactive login for `provider` (5-minute timeout, cancellable). */
-	accountConnect: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<Account_Serialize>("account_connect", { provider }, options),
-	/**  Cancels a connect that is waiting for the browser. */
-	accountCancelConnect: (options?: InvokeOptions) => __TAURI_INVOKE<void>("account_cancel_connect", undefined, options),
-	/**
-	 *  Starts a sync now (all connected providers when `provider` is null). Returns immediately;
-	 *  progress arrives as `sync://progress` / `sync://finished` events.
-	 */
-	syncNow: (provider: ProviderId | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("sync_now", { provider }, options),
-	/**  Cancels a running sync for `provider`. */
-	syncCancel: (provider: ProviderId, options?: InvokeOptions) => __TAURI_INVOKE<void>("sync_cancel", { provider }, options),
-	libraryLiked: (source: ProviderId | null, sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_liked", { source, sort, filter, offset, limit }, options),
-	libraryLikedStats: (source: ProviderId | null, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_liked_stats", { source, filter }, options),
+	libraryLiked: (source: SourceKind | null, sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_liked", { source, sort, filter, offset, limit }, options),
+	libraryLikedStats: (source: SourceKind | null, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_liked_stats", { source, filter }, options),
 	/**  Library → Local files (tracks with an imported local file). */
 	libraryLocal: (sort: LibrarySort, filter: string | null, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("library_local", { sort, filter, offset, limit }, options),
 	libraryLocalStats: (filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<ListStats>("library_local_stats", { filter }, options),
-	libraryAlbums: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Album_Serialize[]>("library_albums", { source, sort, filter }, options),
-	libraryArtists: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Artist_Serialize[]>("library_artists", { source, sort, filter }, options),
-	playlistsList: (source: ProviderId | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Playlist_Serialize[]>("playlists_list", { source, sort, filter }, options),
+	libraryAlbums: (source: SourceKind | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Album_Serialize[]>("library_albums", { source, sort, filter }, options),
+	libraryArtists: (source: SourceKind | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Artist_Serialize[]>("library_artists", { source, sort, filter }, options),
+	playlistsList: (source: SourceKind | null, sort: LibrarySort, filter: string | null, options?: InvokeOptions) => __TAURI_INVOKE<Playlist_Serialize[]>("playlists_list", { source, sort, filter }, options),
 	/**  Header data for a playlist. */
 	playlistGet: (playlistId: string, options?: InvokeOptions) => __TAURI_INVOKE<PlaylistDetail_Serialize>("playlist_get", { playlistId }, options),
-	/**
-	 *  Stored items in order. The first page loads them from the platform if never loaded
-	 *  (spec §5: "Local; fetches if never synced").
-	 */
+	/**  Stored items in order. */
 	playlistTracks: (playlistId: string, offset: number, limit: number, options?: InvokeOptions) => __TAURI_INVOKE<TrackPage_Serialize>("playlist_tracks", { playlistId, offset, limit }, options),
-	/**  Opens the playlist on its platform in the default browser. */
-	playlistOpenExternal: (playlistId: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("playlist_open_external", { playlistId }, options),
-	/**
-	 *  Plays a known embeddable video in the visible test player and reports whether YouTube
-	 *  accepted the embed (Settings → YouTube player → Test playback).
-	 */
-	youtubeTestPlayback: (options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_test_playback", undefined, options),
-	/**  The UI's answer to a test: `ok` when the player reached PLAYING, else the onError code. */
-	youtubeTestReport: (ok: boolean, code: number | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_test_report", { ok, code }, options),
-	/**  State report from the webview IFrame player (spec §5 youtube_player_report). */
-	youtubePlayerReport: (playerState: YoutubePlayerState, positionMs: number, durationMs: number | null, errorCode: number | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("youtube_player_report", { playerState, positionMs, durationMs, errorCode }, options),
-	/**  The YouTubeDock mounted or unmounted (YouTube can only play while it is mounted). */
-	youtubeHostReady: (ready: boolean, options?: InvokeOptions) => __TAURI_INVOKE<void>("youtube_host_ready", { ready }, options),
-	/**  Spotify Premium (cached 1 h when known) and the current Spotify Connect devices. */
-	spotifyCapabilities: (refresh: boolean, options?: InvokeOptions) => __TAURI_INVOKE<SpotifyCapabilities_Serialize>("spotify_capabilities", { refresh }, options),
-	/**  Chooses the Spotify Connect device to play on (`None` = active / first available). */
-	spotifySetDevice: (deviceId: string | null, options?: InvokeOptions) => __TAURI_INVOKE<void>("spotify_set_device", { deviceId }, options),
-	/**  The chosen Spotify Connect device, if any. */
-	spotifyChosenDevice: (options?: InvokeOptions) => __TAURI_INVOKE<string | null>("spotify_chosen_device", undefined, options),
 	/**  Plays `track_ids` from `start_index` (resolver picks the source unless `force_source`). */
 	playerPlay: (trackIds: string[], startIndex: number, forceSource: SourceKind | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("player_play", { trackIds, startIndex, forceSource }, options),
 	/**  Transport controls (pause, resume, next, previous, seek, volume, shuffle, repeat). */
@@ -78,7 +35,7 @@ export const commands = {
 	playerState: (options?: InvokeOptions) => __TAURI_INVOKE<PlayerStateEvent_Serialize>("player_state", undefined, options),
 	/**  Every source of a track with whether it can play here ("Play from…"). */
 	playerSources: (trackId: string, options?: InvokeOptions) => __TAURI_INVOKE<SourceStatus_Serialize[]>("player_sources", { trackId }, options),
-	/**  Opens a track on its platform (e.g. Open in Spotify when it can't play here). */
+	/**  Opens a track's web page (when it can't play here). */
 	trackOpenExternal: (trackId: string, provider: SourceKind, options?: InvokeOptions) => __TAURI_INVOKE<null>("track_open_external", { trackId, provider }, options),
 	/**  Audio output devices for the NativeEngine (Settings → Playback → Output). */
 	playerOutputs: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("player_outputs", undefined, options),
@@ -118,6 +75,34 @@ export const commands = {
 	localRescan: (options?: InvokeOptions) => __TAURI_INVOKE<number>("local_rescan", undefined, options),
 	/**  Locate file…: points a song whose local file moved at `new_path`. */
 	localLocate: (trackId: string, newPath: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("local_locate", { trackId, newPath }, options),
+	/**  Installed extensions, by name. */
+	extensionList: (options?: InvokeOptions) => __TAURI_INVOKE<ExtensionInfo_Serialize[]>("extension_list", undefined, options),
+	/**  Reads the extension behind a GitHub or package link (pinned) without installing it. */
+	extensionPreview: (url: string, options?: InvokeOptions) => __TAURI_INVOKE<ExtensionPreview_Serialize>("extension_preview", { url }, options),
+	/**  Reads a registry.json link and previews every extension it lists, without installing any. */
+	extensionRegistry: (url: string, options?: InvokeOptions) => __TAURI_INVOKE<RegistryPreview_Serialize>("extension_registry", { url }, options),
+	/**  Registry links added on the Extensions page. */
+	extensionRegistries: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("extension_registries", undefined, options),
+	/**  Reads a registry link and saves it when it works. */
+	extensionRegistryAdd: (url: string, options?: InvokeOptions) => __TAURI_INVOKE<RegistryPreview_Serialize>("extension_registry_add", { url }, options),
+	/**  Forgets a saved registry (installed extensions stay). Returns the remaining links. */
+	extensionRegistryRemove: (url: string, options?: InvokeOptions) => __TAURI_INVOKE<string[]>("extension_registry_remove", { url }, options),
+	/**  Installs the previewed extension at `sha` (commit or package SHA-256). Returns the list. */
+	extensionInstall: (url: string, sha: string, options?: InvokeOptions) => __TAURI_INVOKE<ExtensionInfo_Serialize[]>("extension_install", { url, sha }, options),
+	extensionSetEnabled: (id: string, enabled: boolean, options?: InvokeOptions) => __TAURI_INVOKE<ExtensionInfo_Serialize[]>("extension_set_enabled", { id, enabled }, options),
+	extensionRemove: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<ExtensionInfo_Serialize[]>("extension_remove", { id }, options),
+	/**  Searches every enabled extension; each section carries its own error. */
+	extensionSearch: (query: string, options?: InvokeOptions) => __TAURI_INVOKE<ExtensionResults_Serialize[]>("extension_search", { query }, options),
+	/**  Saves search results (by source key) and returns their library track ids, same order. */
+	extensionSaveTracks: (keys: string[], options?: InvokeOptions) => __TAURI_INVOKE<string[]>("extension_save_tracks", { keys }, options),
+	/**  Searches every enabled extension and merges the results into one song list. */
+	extensionSearchAll: (query: string, options?: InvokeOptions) => __TAURI_INVOKE<SearchAll_Serialize>("extension_search_all", { query }, options),
+	/**  The track page for a song (by any of its source keys). */
+	extensionSong: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<SongDetail_Serialize>("extension_song", { key }, options),
+	/**  Plays a song from `source_key` (at `quality` for that extension when given). */
+	extensionPlaySong: (key: string, sourceKey: string, quality: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("extension_play_song", { key, sourceKey, quality }, options),
+	/**  Likes or unlikes a song. Returns the new state. */
+	extensionLikeSong: (key: string, liked: boolean, options?: InvokeOptions) => __TAURI_INVOKE<boolean>("extension_like_song", { key, liked }, options),
 };
 
 /** Events */
@@ -127,37 +112,14 @@ export const events = {
 	localImportProgress: makeEvent<LocalImportProgress_Serialize, LocalImportProgress_Deserialize>("local://import-progress"),
 	playerFallback: makeEvent<PlayerFallback, PlayerFallback>("player://fallback"),
 	playerState: makeEvent<PlayerStateEvent_Serialize, PlayerStateEvent_Deserialize>("player://state"),
-	playerYoutubeCommand: makeEvent<YoutubeCommand, YoutubeCommand>("player://youtube-command"),
-	syncFinished: makeEvent<SyncFinished_Serialize, SyncFinished_Deserialize>("sync://finished"),
-	syncProgress: makeEvent<SyncProgress_Serialize, SyncProgress_Deserialize>("sync://progress"),
 };
 
 /* Types */
-export type Account = Account_Serialize | Account_Deserialize;
-
-export type AccountStatus = "notConnected" | "connected" | "needsReconnect" | "syncing";
-
-export type Account_Deserialize = {
-	provider: ProviderId,
-	status: AccountStatus,
-	displayName?: string | null,
-	/**  Unix seconds. */
-	lastSyncedAt?: number | null,
-};
-
-export type Account_Serialize = {
-	provider: ProviderId,
-	status: AccountStatus,
-	displayName: string | null,
-	/**  Unix seconds. */
-	lastSyncedAt: number | null,
-};
-
 export type Album = Album_Serialize | Album_Deserialize;
 
 export type Album_Deserialize = {
 	id: string,
-	provider: ProviderId,
+	provider: string,
 	itemId: string,
 	name: string,
 	artists: string[],
@@ -168,7 +130,7 @@ export type Album_Deserialize = {
 
 export type Album_Serialize = {
 	id: string,
-	provider: ProviderId,
+	provider: string,
 	itemId: string,
 	name: string,
 	artists: string[],
@@ -194,7 +156,7 @@ export type Artist = Artist_Serialize | Artist_Deserialize;
 
 export type Artist_Deserialize = {
 	id: string,
-	provider: ProviderId,
+	provider: string,
 	itemId: string,
 	name: string,
 	artwork?: string | null,
@@ -202,7 +164,7 @@ export type Artist_Deserialize = {
 
 export type Artist_Serialize = {
 	id: string,
-	provider: ProviderId,
+	provider: string,
 	itemId: string,
 	name: string,
 	artwork: string | null,
@@ -226,14 +188,167 @@ export type AudiusSettings_Serialize = {
 	showTrendingRow: boolean,
 };
 
+/**  What an extension adds to Unison. */
+export type Capability = 
+/**  Results in Search. */
+"search" | 
+/**  Plays its tracks. */
+"play";
+
 /**  Machine-readable error kind, serialised as `{ "type": "rateLimited", "retryAfter": 30 }`. */
-export type ErrorCode = { type: "offline" } | { type: "authCancelled" } | { type: "authTimeout" } | { type: "needsReconnect" } | { type: "invalidClientId" } | { type: "redirectUriMismatch" } | { type: "spotifyPremiumRequired" } | 
-/**  Spotify Development Mode: the signed-in user is not listed under User Management. */
-{ type: "userNotRegistered" } | { type: "noSpotifyDevice" } | { type: "rateLimited"; 
+export type ErrorCode = { type: "offline" } | { type: "rateLimited"; 
 /**  Seconds until the next request is allowed. */
-retryAfter: number } | { type: "youtubeQuotaExceeded"; 
-/**  Unix seconds when the daily quota resets (midnight Pacific). */
-resetsAt: number } | { type: "notEmbeddable" } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "noPlayableSource" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "drmProtected" } | { type: "audiusUnavailable" } | { type: "youtubeEmbedBlocked"; code: number } | { type: "outputDeviceUnavailable" } | { type: "internal" };
+retryAfter: number } | { type: "notFound" } | { type: "upstream"; status: number } | { type: "noPlayableSource" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "drmProtected" } | { type: "audiusUnavailable" } | { type: "outputDeviceUnavailable" } | 
+/**  The pasted link is not an extension, package or registry link. */
+{ type: "extensionLinkInvalid" } | 
+/**  extension.json is missing, malformed, too large or breaks a rule. */
+{ type: "extensionInvalid" } | 
+/**  A URL (or a redirect) points at a host the extension didn't declare, or isn't https. */
+{ type: "extensionHostNotAllowed" } | 
+/**  The extension is turned off or was removed. */
+{ type: "extensionDisabled" } | 
+/**  The extension's service answered with something Unison couldn't use. */
+{ type: "extensionFailed" } | 
+/**  registry.json is missing, malformed, too large or lists no extensions. */
+{ type: "extensionRegistryInvalid" } | 
+/**  The entry or extension can't be used here (not an installable link, or it can't play). */
+{ type: "extensionUnsupported" } | { type: "internal" };
+
+/**  An installed extension as shown in Settings. */
+export type ExtensionInfo = ExtensionInfo_Serialize | ExtensionInfo_Deserialize;
+
+/**  An installed extension as shown in Settings. */
+export type ExtensionInfo_Deserialize = {
+	id: string,
+	name: string,
+	version: string,
+	author?: string | null,
+	description?: string | null,
+	hosts: string[],
+	repoUrl: string,
+	/**  GitHub commit (40 hex) or package SHA-256 (64 hex). */
+	commitSha: string,
+	enabled: boolean,
+	/**  Unix seconds. */
+	installedAt: number,
+	/**  Runs its own code (index.js) in Unison's sandbox. */
+	runsCode: boolean,
+	capabilities: Capability[],
+	/**
+	 *  What the extension says it is (`metadata_provider`, `download_provider`,
+	 *  `lyrics_provider`, …); empty for declarative extensions.
+	 */
+	types: string[],
+	homepage?: string | null,
+	/**  `data:` URL of its icon. */
+	icon?: string | null,
+};
+
+/**  An installed extension as shown in Settings. */
+export type ExtensionInfo_Serialize = {
+	id: string,
+	name: string,
+	version: string,
+	author: string | null,
+	description: string | null,
+	hosts: string[],
+	repoUrl: string,
+	/**  GitHub commit (40 hex) or package SHA-256 (64 hex). */
+	commitSha: string,
+	enabled: boolean,
+	/**  Unix seconds. */
+	installedAt: number,
+	/**  Runs its own code (index.js) in Unison's sandbox. */
+	runsCode: boolean,
+	capabilities: Capability[],
+	/**
+	 *  What the extension says it is (`metadata_provider`, `download_provider`,
+	 *  `lyrics_provider`, …); empty for declarative extensions.
+	 */
+	types: string[],
+	homepage: string | null,
+	/**  `data:` URL of its icon. */
+	icon: string | null,
+};
+
+/**  What an install would add, shown before the user confirms. */
+export type ExtensionPreview = ExtensionPreview_Serialize | ExtensionPreview_Deserialize;
+
+/**  What an install would add, shown before the user confirms. */
+export type ExtensionPreview_Deserialize = {
+	id: string,
+	name: string,
+	version: string,
+	author?: string | null,
+	description?: string | null,
+	/**  Every host the extension will contact (`*.domain` = any subdomain). */
+	hosts: string[],
+	repoUrl: string,
+	/**
+	 *  What the install is pinned to (GitHub commit or package SHA-256); pass it back to
+	 *  `extension_install`.
+	 */
+	commitSha: string,
+	/**  Version already installed under the same id, if any. */
+	installedVersion?: string | null,
+	runsCode: boolean,
+	capabilities: Capability[],
+	types: string[],
+	homepage?: string | null,
+	icon?: string | null,
+};
+
+/**  What an install would add, shown before the user confirms. */
+export type ExtensionPreview_Serialize = {
+	id: string,
+	name: string,
+	version: string,
+	author: string | null,
+	description: string | null,
+	/**  Every host the extension will contact (`*.domain` = any subdomain). */
+	hosts: string[],
+	repoUrl: string,
+	/**
+	 *  What the install is pinned to (GitHub commit or package SHA-256); pass it back to
+	 *  `extension_install`.
+	 */
+	commitSha: string,
+	/**  Version already installed under the same id, if any. */
+	installedVersion: string | null,
+	runsCode: boolean,
+	capabilities: Capability[],
+	types: string[],
+	homepage: string | null,
+	icon: string | null,
+};
+
+/**
+ *  One extension's search answer. `tracks[].id` is the source key (`<extension>:<item>`), not a
+ *  library id; pass keys to `extension_save_tracks` before playing.
+ */
+export type ExtensionResults = ExtensionResults_Serialize | ExtensionResults_Deserialize;
+
+/**
+ *  One extension's search answer. `tracks[].id` is the source key (`<extension>:<item>`), not a
+ *  library id; pass keys to `extension_save_tracks` before playing.
+ */
+export type ExtensionResults_Deserialize = {
+	extensionId: string,
+	extensionName: string,
+	tracks: Track_Deserialize[],
+	error?: AppError | null,
+};
+
+/**
+ *  One extension's search answer. `tracks[].id` is the source key (`<extension>:<item>`), not a
+ *  library id; pass keys to `extension_save_tracks` before playing.
+ */
+export type ExtensionResults_Serialize = {
+	extensionId: string,
+	extensionName: string,
+	tracks: Track_Serialize[],
+	error: AppError | null,
+};
 
 export type Issue = {
 	path: string,
@@ -365,9 +480,9 @@ export type NowPlaying_Serialize = {
 /**  One concrete way to play a track: which engine and which item. */
 export type PlaySource = {
 	kind: SourceKind,
-	/**  Spotify track id, YouTube video id, Audius track id or local fingerprint. */
+	/**  Local fingerprint, Audius track id or `<extension>:<item>`. */
 	itemId: string,
-	/**  Spotify/YouTube/Audius URL or absolute file path. */
+	/**  Web page URL or absolute file path. */
 	url: string,
 };
 
@@ -388,9 +503,6 @@ export type PlayerSettings_Deserialize = {
 	sourcePriority?: SourceKind[],
 	autoFallback?: boolean,
 	fallbackOnErrorMidtrack?: boolean,
-	spotifyMode?: SpotifyMode,
-	/**  Hosted YouTube player page; `None` = direct embed. */
-	youtubeRelayUrl?: string | null,
 	/**  NativeEngine output device; `None` = system default. */
 	outputDevice?: string | null,
 	gapless?: boolean,
@@ -405,9 +517,6 @@ export type PlayerSettings_Serialize = {
 	sourcePriority: SourceKind[],
 	autoFallback: boolean,
 	fallbackOnErrorMidtrack: boolean,
-	spotifyMode: SpotifyMode,
-	/**  Hosted YouTube player page; `None` = direct embed. */
-	youtubeRelayUrl: string | null,
 	/**  NativeEngine output device; `None` = system default. */
 	outputDevice: string | null,
 	gapless: boolean,
@@ -476,13 +585,6 @@ export type PlaylistDetail = PlaylistDetail_Serialize | PlaylistDetail_Deseriali
 /**  Playlist page header data. */
 export type PlaylistDetail_Deserialize = {
 	playlist: Playlist_Deserialize,
-	/**  Link back to the playlist on its platform (branding rules require it). */
-	url?: string | null,
-	/**
-	 *  False for followed Spotify playlists: the API only returns items for owned or
-	 *  collaborative playlists (Feb 2026).
-	 */
-	itemsAvailable: boolean,
 	/**  Total length of the stored items, once loaded. */
 	durationMs?: number | null,
 };
@@ -490,21 +592,14 @@ export type PlaylistDetail_Deserialize = {
 /**  Playlist page header data. */
 export type PlaylistDetail_Serialize = {
 	playlist: Playlist_Serialize,
-	/**  Link back to the playlist on its platform (branding rules require it). */
-	url: string | null,
-	/**
-	 *  False for followed Spotify playlists: the API only returns items for owned or
-	 *  collaborative playlists (Feb 2026).
-	 */
-	itemsAvailable: boolean,
 	/**  Total length of the stored items, once loaded. */
 	durationMs: number | null,
 };
 
 export type Playlist_Deserialize = {
 	id: string,
-	/**  `None` = Unison local playlist. */
-	provider?: ProviderId | null,
+	/**  Where it came from (`None` = Unison local playlist). */
+	provider?: string | null,
 	name: string,
 	owner: string,
 	trackCount: number,
@@ -514,8 +609,8 @@ export type Playlist_Deserialize = {
 
 export type Playlist_Serialize = {
 	id: string,
-	/**  `None` = Unison local playlist. */
-	provider: ProviderId | null,
+	/**  Where it came from (`None` = Unison local playlist). */
+	provider: string | null,
 	name: string,
 	owner: string,
 	trackCount: number,
@@ -523,13 +618,113 @@ export type Playlist_Serialize = {
 	editable: boolean,
 };
 
-/**  A music platform. Stored in SQLite as `'spotify'` / `'youtube'`. */
-export type ProviderId = "spotify" | "youtube";
+/**  One stream quality an extension offers (`qualityOptions`). */
+export type QualityOption = QualityOption_Serialize | QualityOption_Deserialize;
+
+/**  One stream quality an extension offers (`qualityOptions`). */
+export type QualityOption_Deserialize = {
+	id: string,
+	label: string,
+	description?: string | null,
+};
+
+/**  One stream quality an extension offers (`qualityOptions`). */
+export type QualityOption_Serialize = {
+	id: string,
+	label: string,
+	description: string | null,
+};
+
+/**  One extension listed in a registry.json. Exactly one of `preview` / `error` is set. */
+export type RegistryItem = RegistryItem_Serialize | RegistryItem_Deserialize;
+
+/**  One extension listed in a registry.json. Exactly one of `preview` / `error` is set. */
+export type RegistryItem_Deserialize = {
+	/**  The entry's link (or id) as written in registry.json. */
+	entry: string,
+	/**  What the registry itself says about the entry (shown when it can't be previewed). */
+	listed: RegistryListing_Deserialize,
+	preview?: ExtensionPreview_Deserialize | null,
+	error?: AppError | null,
+};
+
+/**  One extension listed in a registry.json. Exactly one of `preview` / `error` is set. */
+export type RegistryItem_Serialize = {
+	/**  The entry's link (or id) as written in registry.json. */
+	entry: string,
+	/**  What the registry itself says about the entry (shown when it can't be previewed). */
+	listed: RegistryListing_Serialize,
+	preview: ExtensionPreview_Serialize | null,
+	error: AppError | null,
+};
+
+/**  What a registry says about an entry, shown even when the entry can't be installed. */
+export type RegistryListing = RegistryListing_Serialize | RegistryListing_Deserialize;
+
+/**  What a registry says about an entry, shown even when the entry can't be installed. */
+export type RegistryListing_Deserialize = {
+	id?: string | null,
+	name?: string | null,
+	version?: string | null,
+	description?: string | null,
+	category?: string | null,
+	tags: string[],
+};
+
+/**  What a registry says about an entry, shown even when the entry can't be installed. */
+export type RegistryListing_Serialize = {
+	id: string | null,
+	name: string | null,
+	version: string | null,
+	description: string | null,
+	category: string | null,
+	tags: string[],
+};
+
+/**  Everything a registry.json lists, previewed (nothing is stored). */
+export type RegistryPreview = RegistryPreview_Serialize | RegistryPreview_Deserialize;
+
+/**  Everything a registry.json lists, previewed (nothing is stored). */
+export type RegistryPreview_Deserialize = {
+	url: string,
+	/**  The commit registry.json was read at. */
+	commitSha: string,
+	items: RegistryItem_Deserialize[],
+};
+
+/**  Everything a registry.json lists, previewed (nothing is stored). */
+export type RegistryPreview_Serialize = {
+	url: string,
+	/**  The commit registry.json was read at. */
+	commitSha: string,
+	items: RegistryItem_Serialize[],
+};
 
 export type RepeatMode = "off" | "all" | "one";
 
 /**  Volume leveling (NativeEngine). */
 export type ReplayGainMode = "off" | "track" | "album";
+
+/**  Search across every extension: songs plus the extensions that failed. */
+export type SearchAll = SearchAll_Serialize | SearchAll_Deserialize;
+
+/**  Search across every extension: songs plus the extensions that failed. */
+export type SearchAll_Deserialize = {
+	songs: Song_Deserialize[],
+	failures: SearchFailure[],
+};
+
+/**  Search across every extension: songs plus the extensions that failed. */
+export type SearchAll_Serialize = {
+	songs: Song_Serialize[],
+	failures: SearchFailure[],
+};
+
+export type SearchFailure = {
+	extensionId: string,
+	extensionName: string,
+	error: AppError,
+};
 
 /**  User preferences. Missing keys fall back to defaults, so older databases keep working. */
 export type Settings = Settings_Serialize | Settings_Deserialize;
@@ -542,10 +737,6 @@ export type Settings_Deserialize = {
 	windowMaterial?: WindowMaterial,
 	/**  Sidebar sections the user collapsed (by section key). */
 	sidebarCollapsed?: string[],
-	/**  Background sync interval in minutes: 15, 30 or 60. */
-	syncIntervalMin?: number,
-	/**  Legacy single preference (superseded by `player.source_priority`, kept for old data). */
-	preferredSource?: ProviderId | null,
 	/**  Universal Player (addendum §5): stored under the key `player`. */
 	player?: PlayerSettings_Deserialize,
 	/**  Local files: stored under the key `local`. */
@@ -562,10 +753,6 @@ export type Settings_Serialize = {
 	windowMaterial: WindowMaterial,
 	/**  Sidebar sections the user collapsed (by section key). */
 	sidebarCollapsed: string[],
-	/**  Background sync interval in minutes: 15, 30 or 60. */
-	syncIntervalMin: number,
-	/**  Legacy single preference (superseded by `player.source_priority`, kept for old data). */
-	preferredSource: ProviderId | null,
 	/**  Universal Player (addendum §5): stored under the key `player`. */
 	player: PlayerSettings_Serialize,
 	/**  Local files: stored under the key `local`. */
@@ -574,33 +761,93 @@ export type Settings_Serialize = {
 	audius: AudiusSettings_Serialize,
 };
 
-export type Signal = {
-	subject: SignalSubject,
-	kind: SignalKind,
-	/**  Unix seconds. */
-	at: number,
+/**  A song, merged across the extensions that have it. */
+export type Song = Song_Serialize | Song_Deserialize;
+
+/**  The track page. */
+export type SongDetail = SongDetail_Serialize | SongDetail_Deserialize;
+
+/**  The track page. */
+export type SongDetail_Deserialize = {
+	song: Song_Deserialize,
+	liked: boolean,
+	/**  Library track id once saved (played or liked). */
+	trackId?: string | null,
 };
 
-/**  Taste signal kinds (spec §8.3). */
-export type SignalKind = "topShort" | "topMedium" | "topLong" | "recent" | "liked" | "play" | "skip" | "replay" | "followed";
+/**  The track page. */
+export type SongDetail_Serialize = {
+	song: Song_Serialize,
+	liked: boolean,
+	/**  Library track id once saved (played or liked). */
+	trackId: string | null,
+};
 
-/**  A taste signal about a track or an artist. */
-export type SignalSubject = 
-/**  Provider-side track reference (resolved to a unified id on insert). */
-({ track: SourceRef }) & { artist?: never } | 
-/**  Artist name. */
-({ artist: string }) & { track?: never };
+/**  One place a song can play from. */
+export type SongSource = SongSource_Serialize | SongSource_Deserialize;
 
-/**  Where a track can be played from. */
-export type SourceKind = "local" | "spotify" | "youtube" | "audius";
-
-/**  Where a unified track can be played. */
-export type SourceRef = {
-	provider: ProviderId,
-	/**  Spotify track id or YouTube video id. */
-	itemId: string,
+/**  One place a song can play from. */
+export type SongSource_Deserialize = {
+	/**  Source key `<extension>:<item>`. */
+	key: string,
+	extensionId: string,
+	extensionName: string,
+	icon?: string | null,
+	/**  The extension gives Unison a stream for it. */
+	canPlay: boolean,
+	qualities: QualityOption_Deserialize[],
+	/**  The quality Unison streams (the user's pick, else the extension's first). */
+	quality?: string | null,
+	/**  Web page of the song on that service ("" when unknown). */
 	url: string,
 };
+
+/**  One place a song can play from. */
+export type SongSource_Serialize = {
+	/**  Source key `<extension>:<item>`. */
+	key: string,
+	extensionId: string,
+	extensionName: string,
+	icon: string | null,
+	/**  The extension gives Unison a stream for it. */
+	canPlay: boolean,
+	qualities: QualityOption_Serialize[],
+	/**  The quality Unison streams (the user's pick, else the extension's first). */
+	quality: string | null,
+	/**  Web page of the song on that service ("" when unknown). */
+	url: string,
+};
+
+/**  A song, merged across the extensions that have it. */
+export type Song_Deserialize = {
+	/**  Key of the first source; the track page's address. */
+	key: string,
+	title: string,
+	artists: string[],
+	album?: string | null,
+	durationMs?: number | null,
+	artwork?: string | null,
+	isrc?: string | null,
+	sources: SongSource_Deserialize[],
+};
+
+/**  A song, merged across the extensions that have it. */
+export type Song_Serialize = {
+	/**  Key of the first source; the track page's address. */
+	key: string,
+	title: string,
+	artists: string[],
+	album: string | null,
+	durationMs: number | null,
+	artwork: string | null,
+	isrc: string | null,
+	sources: SongSource_Serialize[],
+};
+
+/**  Where a track can be played from. */
+export type SourceKind = "local" | "audius" | 
+/**  An installed extension (EXT-01/02); streamed by NativeEngine. */
+"extension";
 
 /**  What `player_sources` returns per source kind. */
 export type SourceStatus = SourceStatus_Serialize | SourceStatus_Deserialize;
@@ -620,97 +867,6 @@ export type SourceStatus_Serialize = {
 	canPlay: boolean,
 	reason: UnavailableReason | null,
 };
-
-export type SpotifyCapabilities = SpotifyCapabilities_Serialize | SpotifyCapabilities_Deserialize;
-
-export type SpotifyCapabilities_Deserialize = {
-	/**  `Some(true)` Premium, `Some(false)` not Premium, `None` unknown (no active device yet). */
-	premium?: boolean | null,
-	devices: SpotifyDevice_Deserialize[],
-};
-
-export type SpotifyCapabilities_Serialize = {
-	/**  `Some(true)` Premium, `Some(false)` not Premium, `None` unknown (no active device yet). */
-	premium: boolean | null,
-	devices: SpotifyDevice_Serialize[],
-};
-
-/**  A Spotify Connect device (subset of the documented DeviceObject). */
-export type SpotifyDevice = SpotifyDevice_Serialize | SpotifyDevice_Deserialize;
-
-/**  A Spotify Connect device (subset of the documented DeviceObject). */
-export type SpotifyDevice_Deserialize = {
-	/**  Nullable in the API; devices without an id can't be targeted. */
-	id?: string | null,
-	name: string,
-	/**  "computer", "smartphone", "speaker", … */
-	kind: string,
-	isActive: boolean,
-	/**  "If true then no Web API commands will be accepted by this device." */
-	isRestricted: boolean,
-	volumePercent?: number | null,
-	supportsVolume: boolean,
-};
-
-/**  A Spotify Connect device (subset of the documented DeviceObject). */
-export type SpotifyDevice_Serialize = {
-	/**  Nullable in the API; devices without an id can't be targeted. */
-	id: string | null,
-	name: string,
-	/**  "computer", "smartphone", "speaker", … */
-	kind: string,
-	isActive: boolean,
-	/**  "If true then no Web API commands will be accepted by this device." */
-	isRestricted: boolean,
-	volumePercent: number | null,
-	supportsVolume: boolean,
-};
-
-/**  How Spotify is used for playback. */
-export type SpotifyMode = 
-/**  Use Spotify when Premium + a device are available, otherwise fall back. */
-"auto" | 
-/**  Ask every time before playing on Spotify. */
-"alwaysAsk" | 
-/**  Never use Spotify for playback. */
-"never";
-
-export type SyncFinished = SyncFinished_Serialize | SyncFinished_Deserialize;
-
-export type SyncFinished_Deserialize = {
-	provider: ProviderId,
-	added: number,
-	removed: number,
-	/**  Set when the sync failed or was cancelled. */
-	error?: AppError | null,
-};
-
-export type SyncFinished_Serialize = {
-	provider: ProviderId,
-	added: number,
-	removed: number,
-	/**  Set when the sync failed or was cancelled. */
-	error: AppError | null,
-};
-
-export type SyncProgress = SyncProgress_Serialize | SyncProgress_Deserialize;
-
-export type SyncProgress_Deserialize = {
-	provider: ProviderId,
-	stage: SyncStage,
-	done: number,
-	total?: number | null,
-};
-
-export type SyncProgress_Serialize = {
-	provider: ProviderId,
-	stage: SyncStage,
-	done: number,
-	total: number | null,
-};
-
-/**  What a sync is working on (shown in the sidebar status line). */
-export type SyncStage = "profile" | "liked" | "playlists" | "albums" | "artists" | "taste";
 
 export type Theme = "dark" | "light";
 
@@ -743,10 +899,10 @@ export type TrackPage_Serialize = {
 	nextOffset: number | null,
 };
 
-/**  One stored source of a track as shown in lists (Spotify, YouTube, a local file, Audius). */
+/**  One stored source of a track as shown in lists (a local file, Audius, an extension). */
 export type TrackSource = {
 	provider: SourceKind,
-	/**  Spotify track id, YouTube video id, local fingerprint or Audius id. */
+	/**  Local fingerprint, Audius id or `<extension>:<item>`. */
 	itemId: string,
 	/**  Web URL, or the absolute file path for local files. */
 	url: string,
@@ -787,8 +943,10 @@ export type Track_Serialize = {
 };
 
 /**  Why a source can't play right now (shown in "Play from…" and Settings → Playback). */
-export type UnavailableReason = { type: "notConnected" } | { type: "premiumRequired" } | { type: "noDevice" } | { type: "notEmbeddable" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "gated" } | 
-/**  Turned off in Settings (e.g. Spotify mode "Never"). */
+export type UnavailableReason = { type: "notConnected" } | 
+/**  The source is marked unavailable (its extension is off or removed). */
+{ type: "unavailable" } | { type: "fileMissing" } | { type: "unsupportedFormat" } | { type: "gated" } | 
+/**  Turned off in Settings. */
 { type: "disabled" } | { type: "offline" } | 
 /**  The track has no source of this kind. */
 { type: "noSource" };
@@ -816,16 +974,6 @@ export type WatchedFolder_Serialize = {
 
 /**  Window backdrop (ADR 0002). Applied at launch; live switching arrives in T-71. */
 export type WindowMaterial = "mica" | "acrylic" | "off";
-
-/**  Commands for the webview's YouTubeHost (spec §5 `player://youtube-command`). */
-export type YoutubeCommand = { type: "load"; videoId: string; startMs: number } | { type: "play" } | { type: "pause" } | { type: "seek"; positionMs: number } | { type: "stop" } | 
-/**  0–100. */
-{ type: "volume"; volume: number } | 
-/**  Play the test video and report through `youtube_test_report`. */
-{ type: "test"; videoId: string };
-
-/**  IFrame player states as reported by the UI (IFrame API -1, 0, 1, 2, 3, 5). */
-export type YoutubePlayerState = "unstarted" | "ended" | "playing" | "paused" | "buffering" | "cued";
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

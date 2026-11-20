@@ -2,7 +2,6 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { strings } from "@/i18n";
 import { usePlayerStore } from "@/stores/player";
-import { useSyncStore } from "@/stores/sync";
 import { useUiStore } from "@/stores/ui";
 import { media } from "@/test/setup";
 import { renderRoute } from "@/test/render";
@@ -32,6 +31,7 @@ const ROUTES: Array<[string, string]> = [
   ["/album/abc", strings.pages.album.title],
   ["/artist/abc", strings.pages.artist.title],
   ["/settings", strings.pages.settings.title],
+  ["/extensions", strings.extensions.title],
 ];
 
 beforeEach(() => {
@@ -162,15 +162,6 @@ describe("player bar placeholder", () => {
     await heading(strings.pages.home.title);
     expect(screen.getByText(strings.player.notPlaying)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: strings.player.play })).toBeDisabled();
-  });
-});
-
-describe("sync store", () => {
-  it("tracks running syncs per provider", () => {
-    useSyncStore.getState().progress("spotify", { stage: "liked", done: 350, total: 2050 });
-    expect(useSyncStore.getState().running.spotify?.done).toBe(350);
-    useSyncStore.getState().finish("spotify");
-    expect(useSyncStore.getState().running.spotify).toBeUndefined();
   });
 });
 

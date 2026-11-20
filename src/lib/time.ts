@@ -18,5 +18,5 @@ export function relativeTime(unixSeconds: number, nowMs: number = Date.now()): s
   for (const [unit, seconds] of STEPS) {
     if (abs >= seconds) return rtf.format(Math.round(diff / seconds), unit);
   }
-  return strings.sync.justNow;
+  return strings.common.justNow;
 }

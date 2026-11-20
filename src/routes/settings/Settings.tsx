@@ -4,12 +4,8 @@ import { Skeleton } from "@/components/ui";
 import { strings } from "@/i18n";
 import { errorMessage } from "@/lib/errors";
 import { useAppInfo } from "@/lib/queries";
-import { AccountsSection } from "./AccountsSection";
 import { LocalSection } from "./LocalSection";
 import { OutputRow } from "./OutputRow";
-import { SpotifyPlaybackRow } from "./SpotifyPlaybackRow";
-import { YoutubeTestCard } from "./YoutubeTestCard";
-import { useUiStore } from "@/stores/ui";
 
 const t = strings.pages.settings;
 const s = strings.settings;
@@ -24,27 +20,23 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function PlaybackSection() {
-  const relay = useUiStore((st) => st.settings?.player.youtubeRelayUrl ?? null);
   return (
     <div className="flex flex-col gap-2">
       <h2 className="px-4 text-footnote font-bold text-text-tertiary">{s.playback}</h2>
       <section className="rounded-card bg-surface [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-border">
         <OutputRow />
-        <SpotifyPlaybackRow />
-        <YoutubeTestCard relay={relay} />
       </section>
     </div>
   );
 }
 
-/** Settings (max 720 px). Playback, appearance, sync and data arrive with T-16 / T-71. */
+/** Settings (max 720 px). Extensions have their own page. */
 export function Settings() {
   const info = useAppInfo();
 
   return (
     <Page title={t.title}>
       <div className="mx-auto flex w-full max-w-[720px] flex-col gap-8">
-        <AccountsSection />
         <PlaybackSection />
         <LocalSection />
         <div className="flex flex-col gap-2">

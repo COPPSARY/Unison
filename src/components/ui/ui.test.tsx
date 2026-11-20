@@ -77,14 +77,14 @@ describe("Input", () => {
 describe("Segmented", () => {
   const options = [
     { value: "all" as const, label: "All" },
-    { value: "spotify" as const, label: "Spotify" },
+    { value: "local" as const, label: "This PC" },
   ];
 
   it("emits the new value and never deselects", async () => {
     const onChange = vi.fn();
     render(<Segmented label="Source" value="all" onValueChange={onChange} options={options} />);
-    await userEvent.click(screen.getByRole("radio", { name: "Spotify" }));
-    expect(onChange).toHaveBeenCalledWith("spotify");
+    await userEvent.click(screen.getByRole("radio", { name: "This PC" }));
+    expect(onChange).toHaveBeenCalledWith("local");
     onChange.mockClear();
     await userEvent.click(screen.getByRole("radio", { name: "All" }));
     expect(onChange).not.toHaveBeenCalled();
@@ -119,8 +119,8 @@ describe("Dialog", () => {
           <Button>Open</Button>
         </DialogTrigger>
         <DialogContent
-          title="Disconnect Spotify?"
-          description="Nothing changes on Spotify."
+          title="Remove Mock Stream?"
+          description="Its songs stay in your library."
           footer={
             <DialogClose asChild>
               <Button>Cancel</Button>
@@ -130,7 +130,7 @@ describe("Dialog", () => {
       </Dialog>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
-    expect(await screen.findByRole("dialog", { name: "Disconnect Spotify?" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Remove Mock Stream?" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open" }));

@@ -69,6 +69,9 @@ v1.0 is done when every "In" row works for a tester who connects their own Spoti
 | Settings | Theme (dark/light), BYOK Client ID, sync interval, clear cache, export my data | In | R |
 | System | Tray icon, start minimized option, auto-update, crash reports (opt-in) | In | B |
 | i18n | English UI; Khmer-ready (font fallback, string files) | In | R |
+| Extensions | Install declarative source extensions (`extension.json`) from a GitHub link; search and stream their tracks (owner-approved 2026-11-20, EXT-01) | In | B |
+| Script extensions | Install packaged / GitHub script extensions (manifest.json + index.js), run them in a sandboxed JS engine for search and streaming; no file downloads (owner-approved 2026-11-20, EXT-02) | In | B |
+| Extensions page | Registries list + per-extension details (about, tags, capabilities, information); Spotify and YouTube removed — extensions are the sources (owner-approved 2026-11-20, EXT-03) | In | B |
 | Unofficial YT Music features (home mixes) | — | Out | — |
 | SoundCloud, Apple Music, Deezer | — | Out (later providers) | — |
 | macOS / Linux release | — | Out (CI builds only) | — |

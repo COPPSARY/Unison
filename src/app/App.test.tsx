@@ -13,5 +13,6 @@ describe("routes", () => {
     ]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
     }
-  });
+    // The UI kit is a large page; under a full parallel run it can take over the default 5 s.
+  }, 20_000);
 });

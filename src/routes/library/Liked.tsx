@@ -1,4 +1,4 @@
-import { Heart, MoreHorizontal, Play, RefreshCw, Shuffle } from "lucide-react";
+import { Heart, Play, Shuffle } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { LibraryToolbar } from "@/components/library/LibraryToolbar";
 import { useLibraryControls } from "@/components/library/controls";
@@ -6,11 +6,11 @@ import { Empty, LoadError, NoResults } from "@/components/library/States";
 import { Page } from "@/components/shell/Page";
 import { Mosaic } from "@/components/track/Artwork";
 import { TrackTable } from "@/components/track/TrackTable";
-import { Button, Icon, IconButton, Menu, MenuContent, MenuItem, MenuTrigger, Skeleton } from "@/components/ui";
+import { Button, Icon, Skeleton } from "@/components/ui";
 import { strings } from "@/i18n";
 import type { Track_Serialize as Track } from "@/lib/bindings";
 import { formatCount, formatTotalDuration } from "@/lib/format";
-import { LIKED_PAGE, useLikedStats, useLikedTracks, useSyncNow } from "@/lib/queries";
+import { LIKED_PAGE, useLikedStats, useLikedTracks } from "@/lib/queries";
 import { playTracks } from "@/lib/playback";
 
 const t = strings.pages.liked;
@@ -27,7 +27,6 @@ function Header({
   stats: { count: number; durationMs: number | null } | undefined;
   play: (shuffle: boolean) => void;
 }) {
-  const syncNow = useSyncNow();
   return (
     <div className="flex items-end gap-6 pt-2 pb-6">
       <Mosaic srcs={artwork} className="size-36 shadow-glass" />
@@ -49,16 +48,6 @@ function Header({
           <Button variant="secondary" onClick={() => play(true)} disabled={!stats?.count}>
             <Icon as={Shuffle} /> {strings.library.shuffle}
           </Button>
-          <Menu>
-            <MenuTrigger asChild>
-              <IconButton label={strings.library.more} icon={<Icon as={MoreHorizontal} />} />
-            </MenuTrigger>
-            <MenuContent align="start">
-              <MenuItem icon={<Icon as={RefreshCw} />} onSelect={() => syncNow.mutate(null)}>
-                {strings.sync.syncNow}
-              </MenuItem>
-            </MenuContent>
-          </Menu>
         </div>
       </div>
     </div>
@@ -90,10 +79,9 @@ export function Liked() {
     [hasNextPage, isFetchingNextPage, fetchNextPage, loaded.length],
   );
 
-  const filtered = controls.query !== "" || controls.source !== "all";
+  const filtered = controls.query !== "";
   const clear = () => {
     controls.setFilter("");
-    controls.setSource("all");
   };
 
   // Nothing liked anywhere: a single empty state, no toolbar.
@@ -117,7 +105,7 @@ export function Liked() {
       />
     );
   } else if (total === 0 && filtered) {
-    body = <NoResults query={controls.query || strings.source[controls.source === "all" ? "all" : controls.source]} onClear={clear} />;
+    body = <NoResults query={controls.query} onClear={clear} />;
   } else {
     body = (
       <TrackTable rows={rows} onVisibleEnd={onVisibleEnd} onPlay={(i) => void playTracks(loaded, i)} label={t.title} />

@@ -10,26 +10,11 @@ use specta::Type;
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ErrorCode {
     Offline,
-    AuthCancelled,
-    AuthTimeout,
-    NeedsReconnect,
-    InvalidClientId,
-    RedirectUriMismatch,
-    SpotifyPremiumRequired,
-    /// Spotify Development Mode: the signed-in user is not listed under User Management.
-    UserNotRegistered,
-    NoSpotifyDevice,
     RateLimited {
         /// Seconds until the next request is allowed.
         #[serde(rename = "retryAfter")]
         retry_after: u32,
     },
-    YoutubeQuotaExceeded {
-        /// Unix seconds when the daily quota resets (midnight Pacific).
-        #[serde(rename = "resetsAt")]
-        resets_at: i64,
-    },
-    NotEmbeddable,
     NotFound,
     Upstream {
         status: u16,
@@ -40,10 +25,22 @@ pub enum ErrorCode {
     UnsupportedFormat,
     DrmProtected,
     AudiusUnavailable,
-    YoutubeEmbedBlocked {
-        code: u16,
-    },
     OutputDeviceUnavailable,
+    // Extensions (EXT-01).
+    /// The pasted link is not an extension, package or registry link.
+    ExtensionLinkInvalid,
+    /// extension.json is missing, malformed, too large or breaks a rule.
+    ExtensionInvalid,
+    /// A URL (or a redirect) points at a host the extension didn't declare, or isn't https.
+    ExtensionHostNotAllowed,
+    /// The extension is turned off or was removed.
+    ExtensionDisabled,
+    /// The extension's service answered with something Unison couldn't use.
+    ExtensionFailed,
+    /// registry.json is missing, malformed, too large or lists no extensions.
+    ExtensionRegistryInvalid,
+    /// The entry or extension can't be used here (not an installable link, or it can't play).
+    ExtensionUnsupported,
     Internal,
 }
 
@@ -53,10 +50,7 @@ impl ErrorCode {
         matches!(
             self,
             ErrorCode::Offline
-                | ErrorCode::AuthTimeout
                 | ErrorCode::RateLimited { .. }
-                | ErrorCode::YoutubeQuotaExceeded { .. }
-                | ErrorCode::NoSpotifyDevice
                 | ErrorCode::Upstream { .. }
         )
     }
@@ -142,7 +136,7 @@ mod tests {
 
     #[test]
     fn retryable_follows_the_code() {
-        assert!(!AppError::new(ErrorCode::InvalidClientId, "x").retryable);
+        assert!(!AppError::new(ErrorCode::ExtensionInvalid, "x").retryable);
         assert!(AppError::new(ErrorCode::Upstream { status: 503 }, "x").retryable);
         assert!(!AppError::internal("x").retryable);
     }

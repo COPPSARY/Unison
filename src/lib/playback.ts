@@ -10,7 +10,7 @@ const sourceName = (k: SourceKind) => strings.source[k];
 
 /**
  * Plays `tracks` starting at `index` (Rust resolves sources). On "no playable source" it offers
- * Open in Spotify / YouTube when the track has such a link.
+ * to open the track's web page when its source has one.
  */
 export async function playTracks(tracks: Track[], index: number, shuffle = false): Promise<void> {
   if (!isTauri() || tracks.length === 0) return;
@@ -21,7 +21,7 @@ export async function playTracks(tracks: Track[], index: number, shuffle = false
     await commands.playerPlay(ids, start, null);
   } catch (err: unknown) {
     const track = tracks[index];
-    const external = track?.sources.find((s) => s.provider === "spotify" || s.provider === "youtube");
+    const external = track?.sources.find((s) => s.url.startsWith("https://"));
     const noSource = isAppError(err) && err.code.type === "noPlayableSource";
     toast({
       title: errorMessage(err),

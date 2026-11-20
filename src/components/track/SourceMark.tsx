@@ -23,22 +23,10 @@ export function SourceMark({ provider, className }: { provider: SourceKind; clas
           <rect x="1" y="2" width="10" height="7" rx="1.5" fill="currentColor" />
           <rect x="4" y="9.5" width="4" height="1.2" rx="0.6" fill="currentColor" />
         </>
-      ) : provider === "audius" ? (
-        <path d="M6 1.2 11 10.2H1z" fill="currentColor" />
-      ) : provider === "spotify" ? (
-        <>
-          <circle cx="6" cy="6" r="5.5" fill="currentColor" />
-          <g fill="none" stroke="var(--background)" strokeLinecap="round">
-            <path d="M3.1 4.6c2-.6 4.1-.4 5.9.6" strokeWidth="1.1" />
-            <path d="M3.5 6.5c1.6-.45 3.2-.3 4.6.45" strokeWidth="0.95" />
-            <path d="M3.9 8.2c1.2-.3 2.4-.2 3.4.35" strokeWidth="0.8" />
-          </g>
-        </>
+      ) : provider === "extension" ? (
+        <path d="M4.5 1.5h3v2a1 1 0 1 0 2 0v-2h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z" fill="currentColor" />
       ) : (
-        <>
-          <rect x="0.5" y="2" width="11" height="8" rx="2.4" fill="currentColor" />
-          <path d="M5 4.4v3.2L7.8 6z" fill="var(--background)" />
-        </>
+        <path d="M6 1.2 11 10.2H1z" fill="currentColor" />
       )}
     </svg>
   );

@@ -78,9 +78,9 @@ const PRESETS: Array<{ label: string; rgb: Rgb | null }> = [
   { label: s.presetGrey, rgb: { r: 120, g: 120, b: 120 } },
 ];
 
-const REDIRECT_URIS = [43821, 43822, 43823].map((p) => `http://127.0.0.1:${p}/callback`);
+const SAMPLE_REGISTRY = "https://raw.githubusercontent.com/owner/repo/main/registry.json";
 
-type Source = "all" | "spotify" | "youtube";
+type Source = "all" | "local" | "extension";
 
 const rgb = (c: Rgb, a = 1) => `rgb(${c.r} ${c.g} ${c.b} / ${a})`;
 
@@ -148,8 +148,8 @@ export function DevUi() {
   const stageColor = accentSource ?? { r: 139, g: 112, b: 255 };
   const sourceOptions: Array<{ value: Source; label: string }> = [
     { value: "all", label: strings.source.all },
-    { value: "spotify", label: strings.source.spotify },
-    { value: "youtube", label: strings.source.youtube },
+    { value: "local", label: strings.source.local },
+    { value: "extension", label: strings.source.extension },
   ];
   const sortOptions = [
     { value: "added", label: strings.sort.dateAdded },
@@ -287,7 +287,7 @@ export function DevUi() {
           </Button>
           <Button variant="glass">{s.glassButton}</Button>
           <Button variant="ghost">{s.ghost}</Button>
-          <Button variant="danger">{strings.accounts.disconnect}</Button>
+          <Button variant="danger">{s.sampleRemove}</Button>
           <Button variant="primary" disabled>
             {s.disabled}
           </Button>
@@ -344,16 +344,16 @@ export function DevUi() {
             <Labeled label={s.invalid}>
               <Input
                 invalid
-                defaultValue="not-a-client-id"
-                aria-label={strings.accounts.clientId}
+                defaultValue="not-a-link"
+                aria-label={s.sampleField}
                 aria-describedby="dev-invalid"
               />
               <span id="dev-invalid" className="text-footnote text-danger">
-                {strings.accounts.invalidClientId}
+                {s.sampleInvalid}
               </span>
             </Labeled>
             <Labeled label={s.disabled}>
-              <Input disabled defaultValue={strings.accounts.clientId} aria-label={strings.accounts.clientId} />
+              <Input disabled defaultValue={s.sampleField} aria-label={s.sampleField} />
             </Labeled>
           </div>
         </Section>
@@ -394,7 +394,7 @@ export function DevUi() {
             <MenuContent>
               <MenuItem icon={<Icon as={ListPlus} />}>{strings.track.addToPlaylist}</MenuItem>
               <MenuItem shortcut="Ctrl+Q">{strings.track.addToQueue}</MenuItem>
-              <MenuItem disabled>{strings.track.openInSpotify}</MenuItem>
+              <MenuItem disabled>{s.sampleOpenDetails}</MenuItem>
               <MenuSeparator />
               <MenuItem icon={<Icon as={Trash2} />} danger>
                 {strings.track.removeFromPlaylist}
@@ -410,15 +410,15 @@ export function DevUi() {
             </DialogTrigger>
             <DialogContent
               icon={<Icon as={Unplug} size={20} />}
-              title={strings.accounts.disconnectSpotifyTitle}
-              description={strings.accounts.disconnectSpotifyBody}
+              title={s.sampleDialogTitle}
+              description={s.sampleDialogBody}
               footer={
                 <>
                   <DialogClose asChild>
                     <Button variant="secondary">{strings.common.cancel}</Button>
                   </DialogClose>
                   <DialogClose asChild>
-                    <Button variant="danger">{strings.accounts.disconnect}</Button>
+                    <Button variant="danger">{s.sampleRemove}</Button>
                   </DialogClose>
                 </>
               }
@@ -432,30 +432,25 @@ export function DevUi() {
               <Button variant="secondary">{s.openDrawer}</Button>
             </DrawerTrigger>
             <DrawerContent
-              title={strings.accounts.byokTitle}
-              footer={<Button variant="primary">{strings.accounts.connect}</Button>}
+              title={s.sampleDrawerTitle}
+              footer={<Button variant="primary">{s.sampleAdd}</Button>}
             >
               <ol className="flex flex-col gap-5">
                 <li className="flex flex-col gap-2">
-                  <p className="text-body text-text">1. {strings.accounts.byokStep1}</p>
+                  <p className="text-body text-text">1. {s.sampleDrawerStep1}</p>
                   <Button variant="secondary" size="sm" className="self-start">
-                    {strings.accounts.openDashboard}
+                    {s.sampleOpenSite}
                   </Button>
                 </li>
                 <li className="flex flex-col gap-2">
-                  <p className="text-body text-text">2. {strings.accounts.byokStep2}</p>
-                  {REDIRECT_URIS.map((uri) => (
-                    <code
-                      key={uri}
-                      className="rounded-control bg-fill-tertiary px-2.5 py-1.5 font-mono text-callout text-text"
-                    >
-                      {uri}
-                    </code>
-                  ))}
+                  <p className="text-body text-text">2. {s.sampleDrawerStep2}</p>
+                  <code className="rounded-control bg-fill-tertiary px-2.5 py-1.5 font-mono text-callout text-text">
+                    {SAMPLE_REGISTRY}
+                  </code>
                 </li>
                 <li className="flex flex-col gap-2">
-                  <p className="text-body text-text">3. {strings.accounts.byokStep3}</p>
-                  <Input placeholder={strings.accounts.clientId} aria-label={strings.accounts.clientId} />
+                  <p className="text-body text-text">3. {s.sampleDrawerStep3}</p>
+                  <Input placeholder={s.sampleField} aria-label={s.sampleField} />
                 </li>
               </ol>
             </DrawerContent>
@@ -473,8 +468,8 @@ export function DevUi() {
             variant="secondary"
             onClick={() =>
               toast({
-                title: strings.feedback.syncFinished,
-                description: format(strings.feedback.syncFinishedBody, { count: 42 }),
+                title: s.sampleToast,
+                description: format(s.sampleToastBody, { count: 42 }),
               })
             }
           >
@@ -491,7 +486,7 @@ export function DevUi() {
           >
             {s.showUndoToast}
           </Button>
-          <Button variant="secondary" onClick={() => toast({ title: strings.feedback.syncFailed, tone: "danger" })}>
+          <Button variant="secondary" onClick={() => toast({ title: s.sampleErrorToast, tone: "danger" })}>
             {s.showErrorToast}
           </Button>
         </Section>
@@ -524,18 +519,18 @@ export function DevUi() {
           <div className="flex w-full flex-col gap-2">
             <Banner icon={<Icon as={CloudOff} />}>{strings.feedback.offline}</Banner>
             <Banner tone="warning" icon={<Icon as={AlertTriangle} />}>
-              {format(strings.feedback.quotaExhausted, { time: "15:00" })}
+              {s.sampleWarning}
             </Banner>
             <Banner
               tone="danger"
               action={
                 <Button size="sm" variant="secondary">
-                  {strings.accounts.reconnect}
+                  {s.sampleRetry}
                 </Button>
               }
               onDismiss={() => undefined}
             >
-              {strings.feedback.spotifyExpired}
+              {s.sampleDanger}
             </Banner>
           </div>
         </Section>

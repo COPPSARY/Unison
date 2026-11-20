@@ -148,7 +148,7 @@ export function Local() {
         job={job}
         play={(shuffle) => void playTracks(loaded.filter((x) => x.available), 0, shuffle)}
       />
-      <LibraryToolbar controls={controls} showSource={false} />
+      <LibraryToolbar controls={controls} />
       {body}
     </div>
   );

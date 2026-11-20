@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 pub use crate::model_player::{
-    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, SpotifyMode, WatchedFolder,
+    AudiusSettings, LocalSettings, PlayerSettings, ReplayGainMode, SourceKind, WatchedFolder,
 };
 
 /// Build and schema information shown in Settings → About.
@@ -15,49 +15,12 @@ pub struct AppInfo {
     pub schema_version: i64,
 }
 
-/// A music platform. Stored in SQLite as `'spotify'` / `'youtube'`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum ProviderId {
-    Spotify,
-    Youtube,
-}
-
-impl ProviderId {
-    pub const ALL: [ProviderId; 2] = [ProviderId::Spotify, ProviderId::Youtube];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ProviderId::Spotify => "spotify",
-            ProviderId::Youtube => "youtube",
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<ProviderId> {
-        match value {
-            "spotify" => Some(ProviderId::Spotify),
-            "youtube" => Some(ProviderId::Youtube),
-            _ => None,
-        }
-    }
-}
-
-/// Where a unified track can be played.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SourceRef {
-    pub provider: ProviderId,
-    /// Spotify track id or YouTube video id.
-    pub item_id: String,
-    pub url: String,
-}
-
-/// One stored source of a track as shown in lists (Spotify, YouTube, a local file, Audius).
+/// One stored source of a track as shown in lists (a local file, Audius, an extension).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackSource {
     pub provider: SourceKind,
-    /// Spotify track id, YouTube video id, local fingerprint or Audius id.
+    /// Local fingerprint, Audius id or `<extension>:<item>`.
     pub item_id: String,
     /// Web URL, or the absolute file path for local files.
     pub url: String,
@@ -87,8 +50,8 @@ pub struct Track {
 #[serde(rename_all = "camelCase")]
 pub struct Playlist {
     pub id: String,
-    /// `None` = Unison local playlist.
-    pub provider: Option<ProviderId>,
+    /// Where it came from (`None` = Unison local playlist).
+    pub provider: Option<String>,
     pub name: String,
     pub owner: String,
     pub track_count: u32,
@@ -121,66 +84,13 @@ impl From<Page<Track>> for TrackPage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum AccountStatus {
-    NotConnected,
-    Connected,
-    NeedsReconnect,
-    Syncing,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct Account {
-    pub provider: ProviderId,
-    pub status: AccountStatus,
-    pub display_name: Option<String>,
-    /// Unix seconds.
-    pub last_synced_at: Option<i64>,
-}
-
-/// Taste signal kinds (spec §8.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SignalKind {
-    TopShort,
-    TopMedium,
-    TopLong,
-    Recent,
-    Liked,
-    Play,
-    Skip,
-    Replay,
-    Followed,
-}
-
-/// A taste signal about a track or an artist.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SignalSubject {
-    /// Provider-side track reference (resolved to a unified id on insert).
-    Track(SourceRef),
-    /// Artist name.
-    Artist(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct Signal {
-    pub subject: SignalSubject,
-    pub kind: SignalKind,
-    /// Unix seconds.
-    pub at: i64,
-}
-
 // ---------------------------------------------------------------- Library views
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Album {
     pub id: String,
-    pub provider: ProviderId,
+    pub provider: String,
     pub item_id: String,
     pub name: String,
     pub artists: Vec<String>,
@@ -193,7 +103,7 @@ pub struct Album {
 #[serde(rename_all = "camelCase")]
 pub struct Artist {
     pub id: String,
-    pub provider: ProviderId,
+    pub provider: String,
     pub item_id: String,
     pub name: String,
     pub artwork: Option<String>,
@@ -213,11 +123,6 @@ pub enum LibrarySort {
 #[serde(rename_all = "camelCase")]
 pub struct PlaylistDetail {
     pub playlist: Playlist,
-    /// Link back to the playlist on its platform (branding rules require it).
-    pub url: Option<String>,
-    /// False for followed Spotify playlists: the API only returns items for owned or
-    /// collaborative playlists (Feb 2026).
-    pub items_available: bool,
     /// Total length of the stored items, once loaded.
     pub duration_ms: Option<f64>,
 }
@@ -260,10 +165,6 @@ pub struct Settings {
     pub window_material: WindowMaterial,
     /// Sidebar sections the user collapsed (by section key).
     pub sidebar_collapsed: Vec<String>,
-    /// Background sync interval in minutes: 15, 30 or 60.
-    pub sync_interval_min: u32,
-    /// Legacy single preference (superseded by `player.source_priority`, kept for old data).
-    pub preferred_source: Option<ProviderId>,
     /// Universal Player (addendum §5): stored under the key `player`.
     pub player: PlayerSettings,
     /// Local files: stored under the key `local`.
@@ -279,8 +180,6 @@ impl Default for Settings {
             glass_frost: 0.5,
             window_material: WindowMaterial::Mica,
             sidebar_collapsed: Vec::new(),
-            sync_interval_min: 30,
-            preferred_source: None,
             player: PlayerSettings::default(),
             local: LocalSettings::default(),
             audius: AudiusSettings::default(),
@@ -295,9 +194,6 @@ impl Settings {
             self.glass_frost = 0.5;
         }
         self.glass_frost = self.glass_frost.clamp(0.0, 1.0);
-        if ![15, 30, 60].contains(&self.sync_interval_min) {
-            self.sync_interval_min = 30;
-        }
         self.sidebar_collapsed.sort();
         self.sidebar_collapsed.dedup();
         self.sidebar_collapsed.truncate(16);
@@ -312,24 +208,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn provider_ids_round_trip() {
-        for p in ProviderId::ALL {
-            assert_eq!(ProviderId::parse(p.as_str()), Some(p));
-        }
-        assert_eq!(ProviderId::parse("soundcloud"), None);
-    }
-
-    #[test]
     fn settings_sanitize() {
         let s = Settings {
             glass_frost: 3.0,
-            sync_interval_min: 7,
             sidebar_collapsed: vec!["b".into(), "a".into(), "b".into()],
             ..Settings::default()
         }
         .sanitized();
         assert_eq!(s.glass_frost, 1.0);
-        assert_eq!(s.sync_interval_min, 30);
         assert_eq!(s.sidebar_collapsed, vec!["a", "b"]);
         let nan = Settings { glass_frost: f32::NAN, ..Settings::default() }.sanitized();
         assert_eq!(nan.glass_frost, 0.5);
@@ -339,6 +225,5 @@ mod tests {
     fn settings_tolerate_missing_fields() {
         let s: Settings = serde_json::from_str(r#"{"theme":"light"}"#).unwrap();
         assert_eq!(s.theme, Theme::Light);
-        assert_eq!(s.sync_interval_min, 30);
     }
 }

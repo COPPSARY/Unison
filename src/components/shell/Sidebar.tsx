@@ -1,4 +1,5 @@
 import {
+  Blocks,
   ChevronDown,
   Disc3,
   HardDrive,
@@ -14,11 +15,11 @@ import {
 import { useId, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { Icon, Tooltip } from "@/components/ui";
-import { format, strings } from "@/i18n";
+import { strings } from "@/i18n";
 import { cn } from "@/lib/cn";
-import { useAccounts, usePlaylists } from "@/lib/queries";
+import { usePlaylists } from "@/lib/queries";
+import { sourceKind } from "@/lib/sources";
 import { SourceMark } from "@/components/track/SourceMark";
-import { useSyncStore } from "@/stores/sync";
 import { useUiStore, type SidebarSection } from "@/stores/ui";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
@@ -26,6 +27,7 @@ type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 const LISTEN: NavItem[] = [
   { to: "/", label: strings.nav.home, icon: House, end: true },
   { to: "/search", label: strings.nav.search, icon: Search },
+  { to: "/extensions", label: strings.nav.extensions, icon: Blocks },
 ];
 
 const LIBRARY: NavItem[] = [
@@ -124,18 +126,7 @@ function Section({
   );
 }
 
-/** Floating glass sidebar, Finder-style (240 px, 64 px collapsed). */
-function syncLine(st: { stage: keyof typeof strings.sync.stage; done: number; total: number | null } | undefined) {
-  if (!st) return "";
-  const stage = strings.sync.stage[st.stage];
-  if (st.total === null || st.done === 0) return stage;
-  return format(strings.sync.progress, { stage, done: count.format(st.done), total: count.format(st.total) });
-}
-
-/** Footer line: connected accounts, or a muted "No account connected". */
-const count = new Intl.NumberFormat();
-
-/** Every playlist, both sources mixed, with a small monochrome source mark (spec §3 Sidebar). */
+/** Every playlist, with a small monochrome source mark when it came from a source. */
 function PlaylistLinks() {
   const playlists = usePlaylists({ provider: null, sort: "title", query: "" });
   if (!playlists.data?.length) {
@@ -143,7 +134,9 @@ function PlaylistLinks() {
   }
   return (
     <>
-      {playlists.data.map((p) => (
+      {playlists.data.map((p) => {
+        const kind = sourceKind(p.provider);
+        return (
         <NavLink
           key={p.id}
           to={`/playlist/${p.id}`}
@@ -155,50 +148,15 @@ function PlaylistLinks() {
           }
         >
           <span className="min-w-0 flex-1 truncate">{p.name}</span>
-          {p.provider ? <SourceMark provider={p.provider} /> : null}
+          {kind ? <SourceMark provider={kind} /> : null}
         </NavLink>
-      ))}
+        );
+      })}
     </>
   );
 }
 
-function AccountStatusLine() {
-  const accounts = useAccounts();
-  const running = useSyncStore((st) => st.running);
-  const connected = (accounts.data ?? []).filter((a) => a.status !== "notConnected");
-  if (connected.length === 0) {
-    return (
-      <p className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-tertiary">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-text-tertiary" />
-        {strings.account.notConnected}
-      </p>
-    );
-  }
-  return (
-    <>
-      {connected.map((a) => (
-        <p key={a.provider} className="flex items-center gap-2 px-2 pt-1.5 text-footnote text-text-muted">
-          <span
-            aria-hidden="true"
-            className={cn(
-              "size-1.5 shrink-0 rounded-full",
-              a.status === "needsReconnect" ? "bg-warning" : running[a.provider] ? "bg-accent" : "bg-success",
-            )}
-          />
-          <span className="truncate tabular-nums">
-            {running[a.provider]
-              ? syncLine(running[a.provider])
-              : format(strings.account.connectedTo, {
-                  provider: strings.source[a.provider],
-                  name: a.displayName ?? "",
-                })}
-          </span>
-        </p>
-      ))}
-    </>
-  );
-}
-
+/** Floating glass sidebar, Finder-style (240 px, 64 px collapsed). */
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const devItems: NavItem[] = import.meta.env.DEV
     ? [{ to: "/dev/ui", label: strings.nav.uiKit, icon: Palette }]
@@ -246,7 +204,6 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           item={{ to: "/settings", label: strings.nav.settings, icon: Settings }}
           collapsed={collapsed}
         />
-        {collapsed ? null : <AccountStatusLine />}
       </div>
     </nav>
   );

@@ -138,6 +138,86 @@ Acceptance criteria:
   that folder (appears within ~5 s), delete it (disappears), move a dropped file and use
   Locate file… on its greyed row, then Rescan library.
 
+### EXT-01 — Extensions (owner-approved 2026-11-20)
+Acceptance criteria:
+- An extension is a declarative `extension.json` (schema 1): id, name, version, hosts allowlist,
+  a search endpoint with JSON Pointer field mapping, and a stream URL (direct or resolved).
+  No extension code runs inside Unison.
+- Settings → Extensions: paste a GitHub repo / tree / blob link → preview (name, author,
+  version, pinned commit, every host it will contact) → Install. Nothing is stored before
+  confirming. Installed list with enable switch and remove.
+- Rejected with a clear message: bad link, invalid manifest, non-https URL, a host not in the
+  allowlist (also on redirects), oversized bodies.
+- Search shows a section per enabled extension; a single click plays the row through
+  NativeEngine (streamed, Range seeking, nothing written to disk). The stream URL is resolved
+  at play time.
+- Disabling or removing an extension marks its saved sources unavailable; never substituted.
+- Tests: manifest validation + mapping, GitHub link parsing, mocked install pinned to a SHA,
+  host allowlist incl. redirects, search with one failing extension, stream resolution,
+  resolver ordering; Vitest for the Settings section and Search sections. All checks green.
+- Status (2026-11-20): built; clippy -D warnings, 200 Rust + 123 Vitest tests green (Linux).
+  Not committed yet. Waiting for the owner's live check with a real extension repo.
+
+### EXT-02 — Script extensions (owner-approved 2026-11-20)
+Acceptance criteria:
+- Packaged extensions (`.spotiflac-ext` / `.sflx` / `.zip` with manifest.json + index.js) install
+  from a pasted https link or a registry.json entry (`download_url`, pinned to its `sha256` when
+  given). A GitHub folder with manifest.json + index.js installs the same way, pinned to a commit.
+  A manifest.json with a `unison` section installs as a declarative extension instead.
+- index.js runs in a sandboxed QuickJS context per call: 128 MB memory, 30 s deadline, no files,
+  processes or modules. HTTP only to `permissions.network` hosts (`*.domain` wildcards), checked
+  on every redirect, bodies capped at 10 MB, per-extension cookie jar.
+- Documented API: registerExtension, http.*, fetch, storage (SQLite), credentials (OS keychain),
+  log/console, utils (base64, md5, sha1/256, HMAC, random), URL/URLSearchParams, TextEncoder/
+  Decoder, atob/btoa, gobackend.getLocalTime, matching.*. file.*, ffmpeg.* and OAuth browser
+  sign-in answer "not available in Unison"; Unison never calls download().
+- `searchTracks` / `customSearch` feed Search; `getDownloadUrl(id, quality)` gives the URL that
+  NativeEngine streams (checked against the hosts, nothing written to disk). Extensions with
+  neither still install, and the preview says they add nothing Unison can use.
+- Preview shows hosts, what it adds (search / playback), "runs code", and the package SHA-256
+  that install re-checks.
+- Status (2026-11-20): built; migration 0005, clippy -D warnings, 220 Rust + 128 Vitest tests
+  green (Linux). Not committed. Not covered: extension settings UI (initialize gets manifest
+  defaults), lyrics, home feed, album/artist pages, OAuth sign-in.
+
+### EXT-03 — Extensions replace Spotify and YouTube (owner-approved 2026-11-20)
+Acceptance criteria:
+- Spotify and YouTube are removed: providers, OAuth/PKCE, accounts, sync, the YouTube IFrame
+  engine and relay, Spotify Connect, their commands, error codes, settings and UI. Migration 0006
+  deletes their synced data (tracks kept when another source has them); their keychain entries
+  are deleted at startup. Old settings load (unknown sources are dropped from the priority).
+- Sidebar → Extensions page: add registry links (saved, removable) or one extension link
+  (preview → install); Installed list and one list per registry, each row with icon, name,
+  version and Install / Update / Installed.
+- Extension details page: icon, name, author, version, Install / Update, on/off, Remove; About;
+  Tags (registry category + tags); Capabilities (manifest types explained + what works in
+  Unison); Information (version, author, website, runs code, hosts, source, pin, installed date,
+  registry).
+- Package icons become data: URLs; the CSP no longer allows Spotify/YouTube hosts or frames.
+- Status (2026-11-20): built; clippy -D warnings, 149 Rust + 108 Vitest tests green (Linux).
+  Not committed. Library pages (Liked, Albums, Artists, Playlists) stay but only fill from local
+  files, Audius and extensions; nothing writes liked/saved rows yet.
+
+### EXT-04 — Unified search, song page, likes (owner-approved 2026-11-20)
+Acceptance criteria:
+- Search shows one song list from every enabled extension, not a section per extension. The
+  same song from several extensions (equal ISRC or the §8.2 matcher) shows once with all its
+  sources; extensions that fail are listed under the results with Retry.
+- A click on a result opens the song page (/track/:key); the artwork's play button plays it.
+- Song page: artwork, title, artists, album, length; Play and Like. Sources tab lists every
+  extension with the song and the stream qualities it offers (manifest qualityOptions); the
+  picked source plays first (track_sources.preference) and the picked quality is remembered per
+  extension. Download-only sources show "Can't play in Unison". Details tab: artists, album,
+  length, ISRC, sources. No downloading.
+- Like/unlike: the song (all its sources on one library track) goes to Liked songs; its album
+  and primary artist appear under Albums and Artists and leave when no liked song has them.
+- Runtime fixes from live testing: utils.randomUserAgent / sleep / isRequestCancelled, 20 s
+  connect timeout, 45 s per call, gzip/brotli/deflate answers, newer searches cancel older ones,
+  per-request deadlines (async HTTP, interruptible while waiting and downloading).
+- Status (2026-11-20): built; migration 0007, clippy -D warnings, 155 Rust + 113 Vitest tests
+  green (Linux). Not committed. Not covered yet: making playlists, extension settings UI
+  (logins / server URLs), "*" network permission (Jellyfin).
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

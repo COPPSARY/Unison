@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
-use crate::core::auth::oauth::now_unix;
+use crate::core::now_unix;
 use crate::core::db::local::{self as repo, KnownFile};
 use crate::error::{AppError, AppResult};
 
