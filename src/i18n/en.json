@@ -290,7 +290,8 @@
     "extensionDisabled": "This extension is off or removed. Turn it on in Settings → Extensions.",
     "extensionFailed": "The extension's service sent something Unison couldn't use. Try again later.",
     "extensionRegistryInvalid": "That registry.json isn't valid or lists no extensions. Ask its author to fix it.",
-    "extensionUnsupported": "This extension can't play songs in Unison: it only gives song info or downloads files. Pick another source on the song's page."
+    "extensionUnsupported": "This extension can't play songs in Unison: it only gives song info or downloads files. Pick another source on the song's page.",
+    "extensionUnsupportedFeature": "Unison won't turn on {extension}: it needs {feature}, which isn't supported because it works around copy protection or a service's private API."
   },
   "settings": {
     "about": "About",
@@ -450,6 +451,7 @@
     "emptyBody": "Paste a registry link above to browse extensions you can add.",
     "openDetails": "Details for {name}",
     "notInstallable": "Can't install",
+    "unsupportedFeature": "Unison won't run this extension: it needs {feature}, which isn't supported because it works around copy protection or a service's private API.",
     "notFoundTitle": "Extension not found",
     "notFoundBody": "It isn't installed and none of your registries lists it.",
     "backToList": "All extensions",

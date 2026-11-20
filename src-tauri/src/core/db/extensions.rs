@@ -51,6 +51,19 @@ impl Spec {
             Spec::Script { manifest, .. } => &manifest.hosts,
         }
     }
+
+    /// `requiredRuntimeFeatures` (none for declarative extensions).
+    pub fn required_features(&self) -> &[String] {
+        match self {
+            Spec::Declarative(_) => &[],
+            Spec::Script { manifest, .. } => &manifest.required_runtime_features,
+        }
+    }
+
+    /// `Err(ExtensionUnsupportedFeature)` when it requires a feature Unison refuses.
+    pub fn check_features(&self) -> AppResult<()> {
+        crate::core::extensions::features::check(self.id(), self.required_features())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,6 +75,13 @@ pub struct Installed {
     pub commit_sha: String,
     pub enabled: bool,
     pub installed_at: i64,
+}
+
+impl Installed {
+    /// On, and every feature it requires is supported. The only gate for search and streams.
+    pub fn usable(&self) -> bool {
+        self.enabled && self.spec.check_features().is_ok()
+    }
 }
 
 type Row = (String, String, String, bool, i64, String, Option<String>, Option<String>);

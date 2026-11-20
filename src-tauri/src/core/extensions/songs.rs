@@ -182,7 +182,7 @@ impl ExtensionManager {
         Ok(db::extensions::list(&self.db)
             .await?
             .iter()
-            .filter(|i| i.enabled)
+            .filter(|i| i.usable())
             .map(|i| (i.spec.id().to_owned(), source_info(i, tier, self.is_download_only(i.spec.id()))))
             .collect())
     }
@@ -357,7 +357,7 @@ impl ExtensionManager {
         let streamers: Vec<Spec> = db::extensions::list(&self.db)
             .await?
             .into_iter()
-            .filter(|i| i.enabled && !have_ext.contains(&i.spec.id()))
+            .filter(|i| i.usable() && !have_ext.contains(&i.spec.id()))
             .filter(|i| capabilities(&i.spec).contains(&Capability::Search) && self.streams(&i.spec))
             .map(|i| i.spec)
             .collect();

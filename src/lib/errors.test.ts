@@ -37,6 +37,7 @@ describe("errors", () => {
       { type: "extensionFailed" },
       { type: "extensionRegistryInvalid" },
       { type: "extensionUnsupported" },
+      { type: "extensionUnsupportedFeature", extension: "amazon", feature: "signedSession@1" },
     ];
     for (const code of codes) expect(messageForCode(code).length).toBeGreaterThan(10);
   });

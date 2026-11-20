@@ -58,6 +58,10 @@ pub struct ScriptManifest {
     /// Functions index.js registered (read when it was installed).
     #[serde(default)]
     pub functions: Vec<String>,
+    /// `requiredRuntimeFeatures`: checked against [`super::features::SUPPORTED`] before the
+    /// extension is turned on.
+    #[serde(default)]
+    pub required_runtime_features: Vec<String>,
 }
 
 /// One stream quality an extension offers (`qualityOptions`).
@@ -194,6 +198,15 @@ impl ScriptManifest {
             .take(20)
             .collect();
         let quality = qualities.first().map(|q| q.id.clone());
+        let required_runtime_features: Vec<String> = match obj.get("requiredRuntimeFeatures") {
+            Some(Value::String(s)) => vec![s.trim().to_owned()],
+            Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).map(|s| s.trim().chars().take(80).collect()).collect(),
+            Some(Value::Null) | None => Vec::new(),
+            Some(_) => return Err(invalid("requiredRuntimeFeatures must be a list of names")),
+        };
+        if required_runtime_features.len() > 40 {
+            return Err(invalid("requiredRuntimeFeatures lists more than 40 features"));
+        }
         Ok(ScriptManifest {
             id,
             name: text(obj, "displayName", 80).unwrap_or_else(|| raw_name.chars().take(80).collect()),
@@ -208,6 +221,7 @@ impl ScriptManifest {
             quality,
             qualities,
             functions: Vec::new(),
+            required_runtime_features,
         })
     }
 
@@ -454,6 +468,14 @@ pub(crate) mod tests {
         assert_eq!(m.settings.get("region"), Some(&json!("US")));
         assert_eq!(m.quality.as_deref(), Some("LOSSLESS"));
         assert_eq!(m.qualities, vec![QualityOption { id: "LOSSLESS".into(), label: "Lossless".into(), description: None }]);
+        assert!(m.required_runtime_features.is_empty());
+
+        let mut with = manifest_json("api.example.org");
+        with["requiredRuntimeFeatures"] = json!(["signedSession@1", " sessionGrant@1 "]);
+        let m = ScriptManifest::parse(with.to_string().as_bytes()).unwrap();
+        assert_eq!(m.required_runtime_features, vec!["signedSession@1", "sessionGrant@1"]);
+        with["requiredRuntimeFeatures"] = json!({ "signedSession@1": true });
+        assert_eq!(ScriptManifest::parse(with.to_string().as_bytes()).unwrap_err().code, ErrorCode::ExtensionInvalid);
 
         let bad = |f: &dyn Fn(&mut Value)| {
             let mut v = manifest_json("api.example.org");

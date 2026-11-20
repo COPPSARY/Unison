@@ -61,6 +61,8 @@ const preview = (over: Record<string, unknown> = {}) => ({
   types: ["metadata_provider", "download_provider"],
   homepage: "https://mock.example",
   icon: ICON,
+  requiredFeatures: [] as string[],
+  unsupportedFeature: null as string | null,
   ...over,
 });
 
@@ -80,6 +82,8 @@ const installed = (over: Record<string, unknown> = {}) => ({
   types: ["metadata_provider"],
   homepage: null,
   icon: ICON,
+  requiredFeatures: [] as string[],
+  unsupportedFeature: null as string | null,
   ...over,
 });
 
@@ -146,6 +150,22 @@ describe("Extensions page", () => {
         t.installedAlready,
       ),
     );
+  });
+
+  it("never offers an extension that needs a refused runtime feature", async () => {
+    const amazon = preview({
+      id: "amazon",
+      name: "Amazon",
+      requiredFeatures: ["signedSession@1"],
+      unsupportedFeature: "signedSession@1",
+    });
+    cmd.extensionRegistries.mockResolvedValue([REGISTRY]);
+    cmd.extensionRegistry.mockResolvedValue(registry([listedItem(amazon)]));
+    renderRoute("/extensions");
+    const list = await screen.findByRole("list", { name: format(t.registryTitle, { name: "acme/hub" }) });
+    expect(within(list).getByRole("button", { name: format(t.installName, { name: "Amazon" }) })).toBeDisabled();
+    expect(within(list).getByText(format(t.unsupportedFeature, { feature: "signedSession@1" }))).toBeInTheDocument();
+    expect(cmd.extensionInstall).not.toHaveBeenCalled();
   });
 
   it("offers Update when a registry has a newer version", async () => {

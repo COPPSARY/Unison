@@ -212,7 +212,12 @@ retryAfter: number } | { type: "notFound" } | { type: "upstream"; status: number
 /**  registry.json is missing, malformed, too large or lists no extensions. */
 { type: "extensionRegistryInvalid" } | 
 /**  The entry or extension can't be used here (not an installable link, or it can't play). */
-{ type: "extensionUnsupported" } | { type: "internal" };
+{ type: "extensionUnsupported" } | 
+/**
+ *  The extension requires a runtime feature Unison refuses (e.g. signed sessions against
+ *  a service's private API, or removing copy protection), so it can't be turned on.
+ */
+{ type: "extensionUnsupportedFeature"; extension: string; feature: string } | { type: "internal" };
 
 /**  An installed extension as shown in Settings. */
 export type ExtensionInfo = ExtensionInfo_Serialize | ExtensionInfo_Deserialize;
@@ -242,6 +247,10 @@ export type ExtensionInfo_Deserialize = {
 	homepage?: string | null,
 	/**  `data:` URL of its icon. */
 	icon?: string | null,
+	/**  `requiredRuntimeFeatures` from its manifest. */
+	requiredFeatures: string[],
+	/**  The first required feature Unison refuses; set means it can't be turned on. */
+	unsupportedFeature?: string | null,
 };
 
 /**  An installed extension as shown in Settings. */
@@ -269,6 +278,10 @@ export type ExtensionInfo_Serialize = {
 	homepage: string | null,
 	/**  `data:` URL of its icon. */
 	icon: string | null,
+	/**  `requiredRuntimeFeatures` from its manifest. */
+	requiredFeatures: string[],
+	/**  The first required feature Unison refuses; set means it can't be turned on. */
+	unsupportedFeature: string | null,
 };
 
 /**  What an install would add, shown before the user confirms. */
@@ -296,6 +309,9 @@ export type ExtensionPreview_Deserialize = {
 	types: string[],
 	homepage?: string | null,
 	icon?: string | null,
+	requiredFeatures: string[],
+	/**  The first required feature Unison refuses; set means it can't be installed. */
+	unsupportedFeature?: string | null,
 };
 
 /**  What an install would add, shown before the user confirms. */
@@ -320,6 +336,9 @@ export type ExtensionPreview_Serialize = {
 	types: string[],
 	homepage: string | null,
 	icon: string | null,
+	requiredFeatures: string[],
+	/**  The first required feature Unison refuses; set means it can't be installed. */
+	unsupportedFeature: string | null,
 };
 
 /**

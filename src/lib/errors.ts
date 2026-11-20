@@ -23,6 +23,8 @@ export function messageForCode(code: ErrorCode): string {
       return format(e.rateLimited, { seconds: code.retryAfter });
     case "upstream":
       return format(e.upstream, { status: code.status });
+    case "extensionUnsupportedFeature":
+      return format(e.extensionUnsupportedFeature, { extension: code.extension, feature: code.feature });
     default:
       return e[code.type];
   }

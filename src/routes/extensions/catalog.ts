@@ -37,11 +37,15 @@ export type CatalogItem = {
   preview: Preview | null;
   /** Why a registry entry can't be installed. */
   error: AppError | null;
+  /** A required runtime feature Unison refuses: it can't be installed or turned on. */
+  unsupportedFeature: string | null;
 };
 
 export type InstallState = "new" | "installed" | "update" | "unavailable";
 
 export function installState(item: CatalogItem): InstallState {
+  // A version that needs a refused runtime feature is never offered.
+  if (item.preview?.unsupportedFeature) return item.installed ? "installed" : "unavailable";
   if (item.installed) {
     return item.preview && item.preview.version !== item.installed.version ? "update" : "installed";
   }
@@ -85,6 +89,7 @@ function fromInstalled(e: ExtensionInfo): CatalogItem {
     installed: e,
     preview: null,
     error: null,
+    unsupportedFeature: e.unsupportedFeature,
   };
 }
 
@@ -112,6 +117,7 @@ function fromRegistry(registry: Registry, installed: readonly ExtensionInfo[]): 
       installed: (p && installed.find((e) => e.id === p.id)) ?? null,
       preview: p,
       error: item.error,
+      unsupportedFeature: p?.unsupportedFeature ?? null,
     };
   });
 }
@@ -154,7 +160,16 @@ export function useCatalog() {
   // Installed rows pick up a registry's tags, category and newer version.
   const installedItems = installed.map((e) => {
     const match = listed.find((l) => l.id === e.id);
-    return match ? { ...fromInstalled(e), tags: match.tags, category: match.category, registry: match.registry, preview: match.preview } : fromInstalled(e);
+    return match
+      ? {
+          ...fromInstalled(e),
+          tags: match.tags,
+          category: match.category,
+          registry: match.registry,
+          preview: match.preview,
+          unsupportedFeature: e.unsupportedFeature ?? match.unsupportedFeature,
+        }
+      : fromInstalled(e);
   });
 
   const find = (key: string): CatalogItem | null =>

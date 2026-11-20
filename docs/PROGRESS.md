@@ -248,6 +248,25 @@ Acceptance criteria:
 - Status (2026-11-21): built; clippy -D warnings, 164 Rust + 115 Vitest tests green (Windows).
   Not committed.
 
+### EXT-06 — Refuse extensions that need unsupported runtime features (CLAUDE.md, 2026-11-21)
+Acceptance criteria:
+- manifest.json `requiredRuntimeFeatures` (list of names) is read and stored with the extension.
+- The supported set is declared in code (`core/extensions/features.rs`, `SUPPORTED`, empty for
+  now). `signedSession@1`, `sessionGrant@1`, `preparedContext@1` and anything that names DRM /
+  decryption / encrypted AC-4 or E-AC-3 are refused by name; unknown features are unsupported too.
+- Install and turning on fail with `ExtensionUnsupportedFeature { extension, feature }`
+  ("Unison won't turn on amazon: it needs signedSession@1 …"). A stored extension that needs a
+  refused feature shows as off and is never searched or streamed (`Installed::usable`).
+- Extensions page: preview, registry rows and details say which feature is refused; Install and
+  the on/off switch are disabled.
+- No `download()` call exists, so nothing new is wired there; when one is added it must go
+  through `Installed::usable()` + the `download_provider` type check in the resolver.
+- Tests: feature rules, manifest parsing, install / enable / search / stream refusal for an
+  `amazon` package with `signedSession@1`, Vitest for the disabled registry row and the message.
+- Status (2026-11-21): built; clippy -D warnings, 170 Rust + 116 Vitest tests green (Windows).
+  Note: extensions installed before this change were stored without `requiredRuntimeFeatures`;
+  reinstall or update them so the check sees their manifest.
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

@@ -8,6 +8,7 @@
 //! streamed through NativeEngine's in-memory HTTP source. Nothing is downloaded to disk.
 
 pub mod client;
+pub mod features;
 pub mod github;
 pub mod manifest;
 pub mod script;
@@ -97,6 +98,10 @@ pub struct ExtensionInfo {
     pub homepage: Option<String>,
     /// `data:` URL of its icon.
     pub icon: Option<String>,
+    /// `requiredRuntimeFeatures` from its manifest.
+    pub required_features: Vec<String>,
+    /// The first required feature Unison refuses; set means it can't be turned on.
+    pub unsupported_feature: Option<String>,
 }
 
 /// What an install would add, shown before the user confirms.
@@ -121,6 +126,9 @@ pub struct ExtensionPreview {
     pub types: Vec<String>,
     pub homepage: Option<String>,
     pub icon: Option<String>,
+    pub required_features: Vec<String>,
+    /// The first required feature Unison refuses; set means it can't be installed.
+    pub unsupported_feature: Option<String>,
 }
 
 /// One extension listed in a registry.json. Exactly one of `preview` / `error` is set.
@@ -158,6 +166,8 @@ pub struct ExtensionResults {
 
 fn info(i: db::extensions::Installed) -> ExtensionInfo {
     let capabilities = capabilities(&i.spec);
+    let required_features = i.spec.required_features().to_vec();
+    let unsupported_feature = features::first_unsupported(&required_features).map(str::to_owned);
     let (author, description, homepage, runs_code, types, icon) = match &i.spec {
         Spec::Declarative(m) => (m.author.clone(), m.description.clone(), m.homepage.clone(), false, Vec::new(), None),
         Spec::Script { manifest, .. } => (
@@ -178,13 +188,15 @@ fn info(i: db::extensions::Installed) -> ExtensionInfo {
         hosts: i.spec.hosts().to_vec(),
         repo_url: i.repo_url,
         commit_sha: i.commit_sha,
-        enabled: i.enabled,
+        enabled: i.enabled && unsupported_feature.is_none(),
         installed_at: i.installed_at,
         runs_code,
         capabilities,
         types,
         homepage,
         icon,
+        required_features,
+        unsupported_feature,
     }
 }
 
@@ -385,6 +397,8 @@ impl ExtensionManager {
             types: i.types,
             homepage: i.homepage,
             icon: i.icon,
+            required_features: i.required_features,
+            unsupported_feature: i.unsupported_feature,
         })
     }
 
@@ -510,12 +524,18 @@ impl ExtensionManager {
             let parsed = RepoLink::parse(link)?;
             (self.github.spec_at(&self.http, &parsed, sha).await?, link.trim().to_owned())
         };
+        spec.check_features()?;
         db::extensions::upsert(&self.db, &spec, &url, sha, now_unix()).await?;
         tracing::info!(extension = %spec.id(), version = %spec.version(), "extension installed");
         self.list().await
     }
 
+    /// Turning on checks `requiredRuntimeFeatures` first (ExtensionUnsupportedFeature).
     pub async fn set_enabled(&self, id: &str, enabled: bool) -> AppResult<Vec<ExtensionInfo>> {
+        if enabled {
+            let installed = db::extensions::get(&self.db, id).await?.ok_or_else(|| AppError::not_found("extension not installed"))?;
+            installed.spec.check_features()?;
+        }
         db::extensions::set_enabled(&self.db, id, enabled).await?;
         self.list().await
     }
@@ -536,7 +556,7 @@ impl ExtensionManager {
         let enabled: Vec<Spec> = db::extensions::list(&self.db)
             .await?
             .into_iter()
-            .filter(|i| i.enabled && capabilities(&i.spec).contains(&Capability::Search))
+            .filter(|i| i.usable() && capabilities(&i.spec).contains(&Capability::Search))
             .map(|i| i.spec)
             .collect();
         // A newer search replaces this one: older script calls stop downloading.
@@ -618,7 +638,7 @@ impl ExtensionManager {
 
     async fn enabled(&self, ext_id: &str) -> AppResult<db::extensions::Installed> {
         match db::extensions::get(&self.db, ext_id).await? {
-            Some(i) if i.enabled => Ok(i),
+            Some(i) if i.enabled => i.spec.check_features().map(|()| i),
             _ => Err(AppError::new(ErrorCode::ExtensionDisabled, "extension is off or removed")),
         }
     }
@@ -1029,6 +1049,45 @@ mod tests {
         mgr.install(&link, &digest).await.unwrap();
         assert!(mgr.search("anything").await.unwrap().is_empty(), "not shown in Search");
         assert_eq!(mgr.resolve_stream("mock-stream:t1").await.unwrap_err().code, ErrorCode::ExtensionUnsupported);
+    }
+
+    #[tokio::test]
+    async fn extensions_requiring_refused_runtime_features_are_never_turned_on() {
+        let (_dir, server, mgr) = setup().await;
+        let base = server.uri();
+        let manifest = json!({
+            "name": "amazon", "version": "1.0.0",
+            "permissions": { "network": ["127.0.0.1"] },
+            "type": ["metadata_provider", "download_provider"],
+            "requiredRuntimeFeatures": ["signedSession@1", "sessionGrant@1", "preparedContext@1"],
+            "settings": [{ "key": "base", "type": "string", "label": "Base", "default": base }]
+        });
+        let pkg = script::package::tests::build(&[("manifest.json", &manifest.to_string()), ("index.js", SCRIPT)]);
+        let digest = package::sha256_hex(&pkg);
+        Mock::given(method("GET"))
+            .and(path("/pkg/amazon.sflx"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(pkg.clone()))
+            .mount(&server)
+            .await;
+        let link = format!("{base}/pkg/amazon.sflx");
+        let refused = ErrorCode::ExtensionUnsupportedFeature { extension: "amazon".into(), feature: "signedSession@1".into() };
+
+        let preview = mgr.preview(&link).await.unwrap();
+        assert_eq!(preview.unsupported_feature.as_deref(), Some("signedSession@1"));
+        assert_eq!(preview.required_features.len(), 3);
+        assert_eq!(mgr.install(&link, &digest).await.unwrap_err().code, refused);
+        assert!(mgr.list().await.unwrap().is_empty(), "nothing stored");
+
+        // One stored before this check existed (or written directly) is still never used.
+        let ext = script::package::read(&pkg).unwrap();
+        let spec = Spec::Script { manifest: Box::new(ext.manifest), code: ext.code };
+        db::extensions::upsert(&mgr.db, &spec, &link, &digest, 0).await.unwrap();
+        let list = mgr.list().await.unwrap();
+        assert!(!list[0].enabled, "shown as off");
+        assert_eq!(mgr.set_enabled("amazon", true).await.unwrap_err().code, refused);
+        assert!(mgr.search("anything").await.unwrap().is_empty(), "not searched");
+        assert_eq!(mgr.resolve_stream("amazon:t1").await.unwrap_err().code, refused);
+        mgr.set_enabled("amazon", false).await.unwrap();
     }
 
     #[tokio::test]

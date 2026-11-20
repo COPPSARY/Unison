@@ -71,6 +71,11 @@ function ExtensionRow({
           {item.error && !item.preview ? (
             <span className="block truncate text-footnote text-text-tertiary">{messageForCode(item.error.code)}</span>
           ) : null}
+          {item.unsupportedFeature ? (
+            <span className="block truncate text-footnote text-text-tertiary">
+              {format(t.unsupportedFeature, { feature: item.unsupportedFeature })}
+            </span>
+          ) : null}
           <ErrorLine error={error} />
         </span>
       </Link>
@@ -208,7 +213,7 @@ function PreviewDialog({
                   {t.cancel}
                 </Button>
               </DialogClose>
-              <Button variant="primary" onClick={onInstall} disabled={installing}>
+              <Button variant="primary" onClick={onInstall} disabled={installing || preview.unsupportedFeature !== null}>
                 {installing ? t.installing : t.install}
               </Button>
             </>
@@ -231,6 +236,11 @@ function PreviewDialog({
               <span>{addsLine(preview.capabilities)}</span>
               {preview.runsCode ? <span>{t.runsCode}</span> : null}
             </div>
+            {preview.unsupportedFeature ? (
+              <p role="alert" className="text-footnote text-danger">
+                {format(t.unsupportedFeature, { feature: preview.unsupportedFeature })}
+              </p>
+            ) : null}
             <div className="flex flex-col gap-1">
               <span className="text-footnote font-bold text-text-tertiary">{t.hosts}</span>
               <ul aria-label={t.hosts} className="flex flex-col gap-0.5">

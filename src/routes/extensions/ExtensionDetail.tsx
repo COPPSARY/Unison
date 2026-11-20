@@ -109,6 +109,7 @@ function Header({ item, actions }: { item: CatalogItem; actions: ReturnType<type
             <>
               <Switch
                 checked={item.installed.enabled}
+                disabled={item.installed.unsupportedFeature !== null}
                 onCheckedChange={(on) => item.installed && void actions.setEnabled(item.key, item.installed.id, on)}
                 label={format(t.enable, { name: item.name })}
               />
@@ -123,6 +124,9 @@ function Header({ item, actions }: { item: CatalogItem; actions: ReturnType<type
             </>
           ) : null}
         </div>
+        {item.unsupportedFeature ? (
+          <p className="text-footnote text-text-muted">{format(t.unsupportedFeature, { feature: item.unsupportedFeature })}</p>
+        ) : null}
         {actions.errors[item.key] ? (
           <p role="alert" className="text-footnote text-danger">
             {actions.errors[item.key]}

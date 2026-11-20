@@ -41,6 +41,12 @@ pub enum ErrorCode {
     ExtensionRegistryInvalid,
     /// The entry or extension can't be used here (not an installable link, or it can't play).
     ExtensionUnsupported,
+    /// The extension requires a runtime feature Unison refuses (e.g. signed sessions against
+    /// a service's private API, or removing copy protection), so it can't be turned on.
+    ExtensionUnsupportedFeature {
+        extension: String,
+        feature: String,
+    },
     Internal,
 }
 
