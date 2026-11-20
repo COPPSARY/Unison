@@ -103,10 +103,17 @@ export const commands = {
 	extensionPlaySong: (key: string, sourceKey: string, quality: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("extension_play_song", { key, sourceKey, quality }, options),
 	/**  Likes or unlikes a song. Returns the new state. */
 	extensionLikeSong: (key: string, liked: boolean, options?: InvokeOptions) => __TAURI_INVOKE<boolean>("extension_like_song", { key, liked }, options),
+	/**
+	 *  Downloads a song from one of its sources (only one with an open licence) into the music
+	 *  folder, where it becomes the song's local file. Returns the job id; the outcome arrives as
+	 *  `download://progress`.
+	 */
+	extensionDownload: (key: string, sourceKey: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("extension_download", { key, sourceKey }, options),
 };
 
 /** Events */
 export const events = {
+	downloadProgress: makeEvent<DownloadProgress_Serialize, DownloadProgress_Deserialize>("download://progress"),
 	localChanged: makeEvent<LocalChanged, LocalChanged>("local://changed"),
 	localDrag: makeEvent<LocalDrag, LocalDrag>("local://drag"),
 	localImportProgress: makeEvent<LocalImportProgress_Serialize, LocalImportProgress_Deserialize>("local://import-progress"),
@@ -195,6 +202,42 @@ export type Capability =
 /**  Plays its tracks. */
 "play";
 
+/**
+ *  `download://progress`: sent while a download runs (at most every 256 KB) and once at the
+ *  end with `finished: true` and either `path` or `error`.
+ */
+export type DownloadProgress = DownloadProgress_Serialize | DownloadProgress_Deserialize;
+
+/**
+ *  `download://progress`: sent while a download runs (at most every 256 KB) and once at the
+ *  end with `finished: true` and either `path` or `error`.
+ */
+export type DownloadProgress_Deserialize = {
+	jobId: number,
+	trackId: string,
+	received: number | null,
+	total?: number | null,
+	finished: boolean,
+	/**  Where the file was saved. */
+	path?: string | null,
+	error?: AppError | null,
+};
+
+/**
+ *  `download://progress`: sent while a download runs (at most every 256 KB) and once at the
+ *  end with `finished: true` and either `path` or `error`.
+ */
+export type DownloadProgress_Serialize = {
+	jobId: number,
+	trackId: string,
+	received: number | null,
+	total: number | null,
+	finished: boolean,
+	/**  Where the file was saved. */
+	path: string | null,
+	error: AppError | null,
+};
+
 /**  Machine-readable error kind, serialised as `{ "type": "rateLimited", "retryAfter": 30 }`. */
 export type ErrorCode = { type: "offline" } | { type: "rateLimited"; 
 /**  Seconds until the next request is allowed. */
@@ -217,7 +260,12 @@ retryAfter: number } | { type: "notFound" } | { type: "upstream"; status: number
  *  The extension requires a runtime feature Unison refuses (e.g. signed sessions against
  *  a service's private API, or removing copy protection), so it can't be turned on.
  */
-{ type: "extensionUnsupportedFeature"; extension: string; feature: string } | { type: "internal" };
+{ type: "extensionUnsupportedFeature"; extension: string; feature: string } | 
+/**
+ *  The source can't be downloaded: it has no open licence, or its extension is off,
+ *  refused or gives no audio (EXT-07).
+ */
+{ type: "downloadNotAllowed" } | { type: "internal" };
 
 /**  An installed extension as shown in Settings. */
 export type ExtensionInfo = ExtensionInfo_Serialize | ExtensionInfo_Deserialize;
@@ -494,6 +542,25 @@ export type NowPlaying_Serialize = {
 	artists: string[],
 	album: string | null,
 	artwork: string | null,
+};
+
+/**  A recognised open licence. */
+export type OpenLicense = OpenLicense_Serialize | OpenLicense_Deserialize;
+
+/**  A recognised open licence. */
+export type OpenLicense_Deserialize = {
+	/**  Short name shown to the user: "CC BY-SA 4.0", "CC0 1.0", "Public domain". */
+	name: string,
+	/**  The licence's page (https, creativecommons.org) when known. */
+	url?: string | null,
+};
+
+/**  A recognised open licence. */
+export type OpenLicense_Serialize = {
+	/**  Short name shown to the user: "CC BY-SA 4.0", "CC0 1.0", "Public domain". */
+	name: string,
+	/**  The licence's page (https, creativecommons.org) when known. */
+	url: string | null,
 };
 
 /**  One concrete way to play a track: which engine and which item. */
@@ -823,6 +890,11 @@ export type SongSource_Deserialize = {
 	quality?: string | null,
 	/**  Web page of the song on that service ("" when unknown). */
 	url: string,
+	/**
+	 *  The open licence the extension reports for it; set means it can be downloaded
+	 *  (when `can_play`).
+	 */
+	license?: OpenLicense_Deserialize | null,
 };
 
 /**  One place a song can play from. */
@@ -839,6 +911,11 @@ export type SongSource_Serialize = {
 	quality: string | null,
 	/**  Web page of the song on that service ("" when unknown). */
 	url: string,
+	/**
+	 *  The open licence the extension reports for it; set means it can be downloaded
+	 *  (when `can_play`).
+	 */
+	license: OpenLicense_Serialize | null,
 };
 
 /**  A song, merged across the extensions that have it. */

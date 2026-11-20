@@ -8,6 +8,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::commands;
 use crate::core::local::jobs::LocalDrag;
+use crate::core::extensions::download::DownloadProgress;
 use crate::core::local::{LocalChanged, LocalImportProgress};
 use crate::core::playback::engine::SourceStatus;
 use crate::core::playback::player::PlayerSnapshot;
@@ -69,13 +70,15 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::extensions::extension_song,
             commands::extensions::extension_play_song,
             commands::extensions::extension_like_song,
+            commands::extensions::extension_download,
         ])
         .events(collect_events![
             PlayerStateEvent,
             PlayerFallback,
             LocalImportProgress,
             LocalChanged,
-            LocalDrag
+            LocalDrag,
+            DownloadProgress
         ])
         .typ::<AppError>()
         .typ::<Track>()

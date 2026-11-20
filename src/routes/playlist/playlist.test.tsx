@@ -14,6 +14,7 @@ vi.mock("@/lib/bindings", () => ({
     localDrag: { listen: () => Promise.resolve(() => undefined) },
     localImportProgress: { listen: () => Promise.resolve(() => undefined) },
     localChanged: { listen: () => Promise.resolve(() => undefined) },
+    downloadProgress: { listen: () => Promise.resolve(() => undefined) },
     playerState: { listen: () => Promise.resolve(() => undefined) },
     playerFallback: { listen: () => Promise.resolve(() => undefined) },
   },

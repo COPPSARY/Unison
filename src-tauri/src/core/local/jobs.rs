@@ -37,7 +37,7 @@ pub fn copy_target<R: Runtime>(app: &AppHandle<R>, setting: Option<&str>) -> App
     Ok(music.join("Unison"))
 }
 
-fn artwork_dir<R: Runtime>(app: &AppHandle<R>) -> AppResult<PathBuf> {
+pub(crate) fn artwork_dir<R: Runtime>(app: &AppHandle<R>) -> AppResult<PathBuf> {
     Ok(app.path().app_data_dir().map_err(|e| AppError::internal(format!("app data dir: {e}")))?.join("artwork"))
 }
 

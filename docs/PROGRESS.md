@@ -267,6 +267,27 @@ Acceptance criteria:
   Note: extensions installed before this change were stored without `requiredRuntimeFeatures`;
   reinstall or update them so the check sees their manifest.
 
+### EXT-07 — Download open-licence songs (owner-approved 2026-11-21, ADR 0005)
+Acceptance criteria:
+- Extension results may declare a licence (script: `license` / `license_url` / `licenseUrl`;
+  declarative: `fields.license` pointer). Creative Commons, CC0 and public domain are
+  recognised (`core/extensions/license.rs`); each search saves or clears it per source key
+  (migration 0008 `source_licenses`).
+- Gate (`download_license`): extension on + no refused runtime feature + gives audio + open
+  licence; otherwise `DownloadNotAllowed` / `ExtensionDisabled` / `ExtensionUnsupportedFeature`.
+- `extension_download(key, sourceKey)` → job id; background job fetches the allowlisted stream
+  URL (hosts checked on redirects, 1 GB cap, 30 min limit), writes `Artist - Title.<ext>` into
+  the music folder (Settings → Local files → where copies go) via a `.part` file, never
+  overwrites, and attaches it to the same song as its local file. `download://progress`
+  reports progress and the outcome. An extension's `download()` is never called.
+- Song page: sources with a licence show "Licence: …" and Download (with progress); a toast
+  says where the file went or why it failed.
+- Tests: licence parsing, file naming / type detection, end-to-end gate + save + attach +
+  licence withdrawn + extension off; Vitest for the Download button and the refusal message.
+- Status (2026-11-21): built; clippy -D warnings, 177 Rust + 118 Vitest tests green (Windows).
+  Waiting for the owner's live check with an extension that reports CC licences (e.g. a
+  Jamendo or Internet Archive extension). None of the installed ones do yet.
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

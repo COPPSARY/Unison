@@ -66,6 +66,9 @@ pub struct Fields {
     /// Web page of the track (for "Open in…").
     #[serde(default)]
     pub url: Option<String>,
+    /// The track's licence (a URL, a name or `{ url, name }`); open licences allow Download.
+    #[serde(default)]
+    pub license: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,6 +332,8 @@ pub struct MappedItem {
     pub track: TrackInput,
     /// Remote artwork URL, fetched into the local cache by the manager.
     pub artwork_remote: Option<String>,
+    /// An open licence the result declares (EXT-07).
+    pub license: Option<super::license::OpenLicense>,
 }
 
 impl Manifest {
@@ -363,6 +368,7 @@ impl Manifest {
                         available: true,
                     },
                     artwork_remote: text(item, f.artwork.as_ref()),
+                    license: f.license.as_ref().and_then(|p| item.pointer(p)).and_then(super::license::parse),
                     item_id,
                 })
             })

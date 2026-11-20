@@ -4,6 +4,7 @@
 use serde_json::{Map, Value};
 use sqlx::SqlitePool;
 
+use crate::core::extensions::license::OpenLicense;
 use crate::core::extensions::manifest::Manifest;
 use crate::core::extensions::script::ScriptManifest;
 use crate::error::{AppError, AppResult};
@@ -238,4 +239,42 @@ pub async fn remove_registry(pool: &SqlitePool, url: &str) -> AppResult<()> {
 pub async fn set_quality(pool: &SqlitePool, id: &str, quality: Option<&str>) -> AppResult<()> {
     sqlx::query("UPDATE extensions SET quality = ?2 WHERE id = ?1").bind(id).bind(quality).execute(pool).await?;
     Ok(())
+}
+
+/// Saves the open licence each result declares (`None` forgets an earlier one).
+pub async fn save_licenses(
+    pool: &SqlitePool,
+    items: &[(&str, Option<&OpenLicense>)],
+    now: i64,
+) -> AppResult<()> {
+    let mut tx = pool.begin().await?;
+    for (key, license) in items {
+        match license {
+            Some(l) => {
+                sqlx::query(
+                    "INSERT INTO source_licenses (item_id, name, url, fetched_at) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(item_id) DO UPDATE SET name = excluded.name, url = excluded.url,
+                       fetched_at = excluded.fetched_at",
+                )
+                .bind(key)
+                .bind(&l.name)
+                .bind(&l.url)
+                .bind(now)
+                .execute(&mut *tx)
+                .await?;
+            }
+            None => {
+                sqlx::query("DELETE FROM source_licenses WHERE item_id = ?1").bind(key).execute(&mut *tx).await?;
+            }
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// The open licence saved for a source key, if any.
+pub async fn license(pool: &SqlitePool, key: &str) -> AppResult<Option<OpenLicense>> {
+    let row: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT name, url FROM source_licenses WHERE item_id = ?1").bind(key).fetch_optional(pool).await?;
+    Ok(row.map(|(name, url)| OpenLicense { name, url }))
 }

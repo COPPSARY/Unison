@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Heart, Music, Play } from "lucide-react";
+import { ChevronLeft, Download, Heart, Music, Play } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { EmptyState } from "@/components/shell/Page";
@@ -14,19 +14,52 @@ import { formatDuration } from "@/lib/format";
 import { useSong } from "@/lib/queries";
 import { playSong } from "@/lib/songs";
 import { ExtensionIcon } from "@/routes/extensions/ExtensionIcon";
+import { useDownloadsStore, useSourceDownload } from "@/stores/downloads";
 import { toast } from "@/stores/toast";
 
 const t = strings.pages.track;
 type Tab = "sources" | "details";
 
+/** Download for a source with an open licence (EXT-07); shows progress while it runs. */
+function DownloadButton({ songKey, source }: { songKey: string; source: SongSource }) {
+  const job = useSourceDownload(source.key);
+  const [starting, setStarting] = useState(false);
+  const start = () => {
+    setStarting(true);
+    commands
+      .extensionDownload(songKey, source.key)
+      .then((jobId) => useDownloadsStore.getState().started(jobId, source.key))
+      .catch((err: unknown) => toast({ title: t.downloadFailed, description: errorMessage(err), tone: "danger" }))
+      .finally(() => setStarting(false));
+  };
+  const label = job
+    ? job.total
+      ? format(t.downloading, { percent: Math.floor((job.received / job.total) * 100) })
+      : t.downloadingUnknown
+    : t.download;
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      disabled={starting || job !== null}
+      onClick={start}
+      aria-label={format(t.downloadFrom, { name: source.extensionName })}
+    >
+      <Icon as={Download} /> <span className="tabular-nums">{label}</span>
+    </Button>
+  );
+}
+
 /** One source: pick it (radio) and its quality. */
 function SourceRow({
+  songKey,
   source,
   selected,
   quality,
   onSelect,
   onQuality,
 }: {
+  songKey: string;
   source: SongSource;
   selected: boolean;
   quality: string | null;
@@ -49,8 +82,12 @@ function SourceRow({
         <span className="min-w-0">
           <span className="block truncate text-body text-text">{source.extensionName}</span>
           {source.canPlay ? null : <span className="block text-footnote text-text-muted">{t.cantPlay}</span>}
+          {source.license ? (
+            <span className="block truncate text-footnote text-text-muted">{format(t.license, { name: source.license.name })}</span>
+          ) : null}
         </span>
       </label>
+      {source.license && source.canPlay ? <DownloadButton songKey={songKey} source={source} /> : null}
       {source.qualities.length > 0 && source.canPlay ? (
         <div className="w-44">
           <Select
@@ -177,6 +214,7 @@ function SongPage({ detail }: { detail: SongDetail }) {
                   {song.sources.map((s) => (
                     <SourceRow
                       key={s.key}
+                      songKey={song.key}
                       source={s}
                       selected={s.key === sourceKey}
                       quality={qualityOf(s)}

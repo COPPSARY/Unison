@@ -55,14 +55,17 @@ The full spec is the "AI Build Spec" doc; sections are referenced as §N.
 
 ## Never
 - Commit .env.local, keys, tokens or fixture files containing real user data.
-- Add audio download (never call an extension's download(); no file / ffmpeg APIs) or ad-blocking.
+- Add ad-blocking, or audio download beyond docs/decisions/0005: only sources with an open
+  licence (Creative Commons, CC0, public domain) through core/extensions/download.rs; never call
+  an extension's download(); scripts get no file / ffmpeg APIs.
 - Add features not marked "In" in §2; put ideas in docs/IDEAS.md.
 
 ## Universal player (see docs/Unison-Universal-Player.pdf, §UP)
 - Work order: UP-01..UP-16 after T-15, then T-16. T-40..T-44 are replaced by UP tasks.
 - Rust owns the queue, resolver and all engines' state. The UI never decides which source plays.
 - Engine: NativeEngine (local files, Audius and extension HTTP streams, symphonia + rodio/cpal).
-- Never download or cache extension audio to disk; stream it in memory only.
+- Stream extension audio in memory; the only thing written to disk is an open-licence download
+  (docs/decisions/0005), which becomes the song's local file.
 - Fallback may only switch between sources merged into the same tracks row. Never play a
   different song as a substitute. Audius merges only on ISRC or strict match (0.95/0.95/±2s).
 - Local files are referenced in place by default; fingerprint = size + BLAKE3(first 1MB + last 64KB).

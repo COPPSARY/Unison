@@ -47,6 +47,9 @@ pub enum ErrorCode {
         extension: String,
         feature: String,
     },
+    /// The source can't be downloaded: it has no open licence, or its extension is off,
+    /// refused or gives no audio (EXT-07).
+    DownloadNotAllowed,
     Internal,
 }
 

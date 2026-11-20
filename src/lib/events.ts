@@ -1,9 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { strings } from "@/i18n";
 import { events } from "@/lib/bindings";
+import { messageForCode } from "@/lib/errors";
 import { onImportProgress } from "@/lib/local";
 import { isTauri } from "@/lib/window";
+import { useDownloadsStore } from "@/stores/downloads";
 import { useLocalImportStore } from "@/stores/localImport";
+import { toast } from "@/stores/toast";
 
 /** Subscribes to local-file events: drag overlay, import progress / summary, library refresh. */
 export function useLocalEvents() {
@@ -26,6 +30,23 @@ export function useLocalEvents() {
       }),
     );
     keep(events.localChanged.listen(() => void qc.invalidateQueries()));
+    keep(
+      events.downloadProgress.listen(({ payload }) => {
+        const store = useDownloadsStore.getState();
+        if (!payload.finished) {
+          store.progress(payload.jobId, payload.received ?? 0, payload.total ?? null);
+          return;
+        }
+        store.finished(payload.jobId);
+        const t = strings.pages.track;
+        if (payload.error) {
+          toast({ title: t.downloadFailed, description: messageForCode(payload.error.code), tone: "danger" });
+        } else {
+          toast({ title: t.downloaded, ...(payload.path ? { description: payload.path } : {}) });
+          void qc.invalidateQueries({ queryKey: ["song"] });
+        }
+      }),
+    );
 
     return () => {
       disposed = true;

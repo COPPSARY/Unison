@@ -364,6 +364,29 @@ pub async fn relink(conn: &mut SqliteConnection, track_id: &str, f: &LocalFileIn
     insert_file(conn, track_id, 1.0, f, now, added_at).await
 }
 
+/// A downloaded file joins `track_id` as its local source (no matcher: it is that song's
+/// audio). A song that already has a local file gets it replaced, as with Locate file.
+pub async fn attach(conn: &mut SqliteConnection, track_id: &str, f: &LocalFileInput, now: i64) -> AppResult<()> {
+    let has_local: Option<String> =
+        sqlx::query_scalar("SELECT item_id FROM track_sources WHERE track_id = ?1 AND provider = ?2 LIMIT 1")
+            .bind(track_id)
+            .bind(PROVIDER)
+            .fetch_optional(&mut *conn)
+            .await?;
+    if has_local.is_some() {
+        return relink(conn, track_id, f, now).await;
+    }
+    let taken: Vec<String> = sqlx::query_scalar("SELECT fingerprint FROM local_files WHERE fingerprint = ?1 OR path = ?2")
+        .bind(&f.fingerprint)
+        .bind(&f.path)
+        .fetch_all(&mut *conn)
+        .await?;
+    for fp in taken {
+        remove(conn, &fp).await?;
+    }
+    insert_file(conn, track_id, 1.0, f, now, now).await
+}
+
 /// Watched folders, oldest first.
 pub async fn folders(conn: &mut SqliteConnection) -> AppResult<Vec<(String, Option<i64>)>> {
     Ok(sqlx::query_as("SELECT path, last_scan_at FROM watched_folders ORDER BY rowid")

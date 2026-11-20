@@ -43,6 +43,9 @@ pub struct SongSource {
     pub quality: Option<String>,
     /// Web page of the song on that service ("" when unknown).
     pub url: String,
+    /// The open licence the extension reports for it; set means it can be downloaded
+    /// (when `can_play`).
+    pub license: Option<super::license::OpenLicense>,
 }
 
 /// A song, merged across the extensions that have it.
@@ -121,6 +124,7 @@ fn song_source(key: &str, url: &str, infos: &HashMap<String, SourceInfo>) -> Opt
         qualities: info.qualities.clone(),
         quality: info.quality.clone(),
         url: url.to_owned(),
+        license: None,
     })
 }
 
@@ -264,6 +268,10 @@ impl ExtensionManager {
             (None, Some(id)) => self.stored_song(id, &infos).await?.ok_or_else(|| AppError::not_found("song not found"))?,
             (None, None) => return Err(AppError::not_found("song not found; search again")),
         };
+        let mut song = song;
+        for s in &mut song.sources {
+            s.license = if s.can_play { db::extensions::license(&self.db, &s.key).await? } else { None };
+        }
         let liked = match &track_id {
             Some(id) => db::library::is_liked(&mut *self.db.acquire().await?, id).await?,
             None => false,
@@ -272,7 +280,7 @@ impl ExtensionManager {
     }
 
     /// Saves a song (all its sources on one library track) and returns the track id.
-    async fn save_song(&self, key: &str) -> AppResult<String> {
+    pub(crate) async fn save_song(&self, key: &str) -> AppResult<String> {
         if let Some(id) = self.track_of(key).await? {
             // Already saved; add sources found since (e.g. a new search).
             let song = self.songs.lock().ok().and_then(|m| m.get(key).cloned());

@@ -2,7 +2,8 @@
 //! (`.spotiflac-ext` / `.sflx` zip) or a GitHub folder. index.js runs in a sandboxed QuickJS
 //! engine ([`runtime`]) that only reaches the hosts in `permissions.network`. Unison uses
 //! `searchTracks` / `customSearch` for Search and `getDownloadUrl` as the stream URL that
-//! NativeEngine plays; nothing is written to disk (no file, ffmpeg or download APIs).
+//! NativeEngine plays. Scripts get no file, ffmpeg or download APIs and their `download()` is
+//! never called; open-licence downloads are done by the host ([`super::download`]).
 
 pub mod package;
 pub mod runtime;
@@ -366,6 +367,7 @@ pub fn map_search(ext_id: &str, body: &Value) -> AppResult<Vec<MappedItem>> {
                     available: true,
                 },
                 artwork_remote: artwork(item),
+                license: super::license::of_item(item),
                 item_id,
             })
         })

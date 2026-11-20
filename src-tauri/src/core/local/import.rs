@@ -221,6 +221,30 @@ pub async fn locate(
     extensions: &[String],
     artwork_dir: PathBuf,
 ) -> AppResult<()> {
+    let input = read_one(path, extensions, artwork_dir).await?;
+    let mut tx = pool.begin().await?;
+    repo::relink(&mut tx, track_id, &input, now_unix()).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// A downloaded file becomes `track_id`'s local source (EXT-07).
+pub async fn attach(
+    pool: &SqlitePool,
+    track_id: &str,
+    path: &Path,
+    extensions: &[String],
+    artwork_dir: PathBuf,
+) -> AppResult<()> {
+    let input = read_one(path, extensions, artwork_dir).await?;
+    let mut tx = pool.begin().await?;
+    repo::attach(&mut tx, track_id, &input, now_unix()).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Reads one audio file the way an import would, or says why it can't be used.
+async fn read_one(path: &Path, extensions: &[String], artwork_dir: PathBuf) -> AppResult<repo::LocalFileInput> {
     use super::IssueKind;
     use crate::error::ErrorCode;
 
@@ -239,19 +263,15 @@ pub async fn locate(
         _ => return Err(AppError::new(ErrorCode::UnsupportedFormat, "not an audio file")),
     };
     let prepared = blocking(move || prepare(&file, None, &artwork_dir)).await?;
-    let input = match prepared {
-        Prepared::File(input) => input,
+    match prepared {
+        Prepared::File(input) => Ok(*input),
         Prepared::Failed(issue) => {
             let code =
                 if issue.reason == IssueKind::Missing { ErrorCode::FileMissing } else { ErrorCode::UnsupportedFormat };
-            return Err(AppError::new(code, "the chosen file can't be read"));
+            Err(AppError::new(code, "the chosen file can't be read"))
         }
-        Prepared::Unchanged => return Err(AppError::internal("unexpected unchanged file")),
-    };
-    let mut tx = pool.begin().await?;
-    repo::relink(&mut tx, track_id, &input, now_unix()).await?;
-    tx.commit().await?;
-    Ok(())
+        Prepared::Unchanged => Err(AppError::internal("unexpected unchanged file")),
+    }
 }
 
 #[cfg(test)]

@@ -262,6 +262,13 @@
       "quality": "Quality on {name}",
       "defaultQuality": "Default",
       "cantPlay": "Can't play in Unison",
+      "license": "Licence: {name}",
+      "download": "Download",
+      "downloadFrom": "Download from {name}",
+      "downloading": "Downloading {percent}%",
+      "downloadingUnknown": "Downloading…",
+      "downloaded": "Saved to your music folder",
+      "downloadFailed": "Download failed",
       "noSources": "None of your extensions that have this song are on.",
       "album": "Album",
       "artists": "Artists",
@@ -291,6 +298,7 @@
     "extensionFailed": "The extension's service sent something Unison couldn't use. Try again later.",
     "extensionRegistryInvalid": "That registry.json isn't valid or lists no extensions. Ask its author to fix it.",
     "extensionUnsupported": "This extension can't play songs in Unison: it only gives song info or downloads files. Pick another source on the song's page.",
+    "downloadNotAllowed": "This source can't be downloaded: only songs its extension marks with an open licence (such as Creative Commons) can be saved.",
     "extensionUnsupportedFeature": "Unison won't turn on {extension}: it needs {feature}, which isn't supported because it works around copy protection or a service's private API."
   },
   "settings": {

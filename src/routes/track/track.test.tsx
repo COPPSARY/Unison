@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { format, strings } from "@/i18n";
+import { useDownloadsStore } from "@/stores/downloads";
 import { renderRoute } from "@/test/render";
 
 const cmd = {
@@ -8,6 +9,7 @@ const cmd = {
   extensionSong: vi.fn(),
   extensionPlaySong: vi.fn(),
   extensionLikeSong: vi.fn(),
+  extensionDownload: vi.fn(),
   playerState: vi.fn(),
 };
 
@@ -35,13 +37,16 @@ const detail = (liked = false) => ({
     artwork: null,
     isrc: "USABC2400001",
     sources: [
-      { key: "a:1", extensionId: "a", extensionName: "Store A", icon: null, canPlay: true, qualities: [], quality: null, url: "" },
+      {
+        key: "a:1", extensionId: "a", extensionName: "Store A", icon: null, canPlay: true, qualities: [], quality: null, url: "",
+        license: { name: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+      },
       {
         key: "b:9", extensionId: "b", extensionName: "Store B", icon: null, canPlay: true,
         qualities: [{ id: "LOSSLESS", label: "Lossless", description: null }, { id: "HI_RES", label: "Hi-Res", description: null }],
-        quality: "LOSSLESS", url: "",
+        quality: "LOSSLESS", url: "", license: null,
       },
-      { key: "c:3", extensionId: "c", extensionName: "Downloader", icon: null, canPlay: false, qualities: [], quality: null, url: "" },
+      { key: "c:3", extensionId: "c", extensionName: "Downloader", icon: null, canPlay: false, qualities: [], quality: null, url: "", license: null },
     ],
   },
   liked,
@@ -50,6 +55,7 @@ const detail = (liked = false) => ({
 
 beforeEach(() => {
   for (const fn of Object.values(cmd)) fn.mockReset();
+  useDownloadsStore.setState({ jobs: {} });
   cmd.playlistsList.mockResolvedValue([]);
   cmd.extensionSong.mockResolvedValue(detail());
   cmd.extensionPlaySong.mockResolvedValue(null);
@@ -74,6 +80,27 @@ describe("Track page", () => {
     await userEvent.click(await screen.findByRole("option", { name: "Hi-Res" }));
     await userEvent.click(within(screen.getByRole("main")).getByRole("button", { name: t.play }));
     await waitFor(() => expect(cmd.extensionPlaySong).toHaveBeenLastCalledWith("a:1", "b:9", "HI_RES"));
+  });
+
+  it("offers Download only for a source with an open licence", async () => {
+    cmd.extensionDownload.mockResolvedValue(4);
+    renderRoute("/track/a%3A1");
+    const sources = await screen.findByRole("list", { name: t.sources });
+    expect(within(sources).getByText(format(t.license, { name: "CC BY-SA 4.0" }))).toBeInTheDocument();
+    expect(within(sources).queryByRole("button", { name: format(t.downloadFrom, { name: "Store B" }) })).toBeNull();
+    expect(within(sources).queryByRole("button", { name: format(t.downloadFrom, { name: "Downloader" }) })).toBeNull();
+    const download = within(sources).getByRole("button", { name: format(t.downloadFrom, { name: "Store A" }) });
+    await userEvent.click(download);
+    expect(cmd.extensionDownload).toHaveBeenCalledWith("a:1", "a:1");
+    await waitFor(() => expect(download).toBeDisabled());
+    expect(download).toHaveTextContent(t.downloadingUnknown);
+  });
+
+  it("says why a download was refused", async () => {
+    cmd.extensionDownload.mockRejectedValue({ code: { type: "downloadNotAllowed" }, message: "x", retryable: false });
+    renderRoute("/track/a%3A1");
+    await userEvent.click(await screen.findByRole("button", { name: format(t.downloadFrom, { name: "Store A" }) }));
+    expect(await screen.findByText(strings.errors.downloadNotAllowed)).toBeInTheDocument();
   });
 
   it("likes the song", async () => {

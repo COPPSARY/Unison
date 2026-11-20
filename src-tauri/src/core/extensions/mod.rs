@@ -5,11 +5,14 @@
 //!   `.sflx`) or a GitHub folder. index.js runs in a sandboxed QuickJS engine ([`script`]).
 //!
 //! Either kind talks only to the hosts it declares (checked on every redirect), and audio is
-//! streamed through NativeEngine's in-memory HTTP source. Nothing is downloaded to disk.
+//! streamed through NativeEngine's in-memory HTTP source. Only sources with an open licence
+//! can be saved to disk, through [`download`] (EXT-07).
 
 pub mod client;
 pub mod features;
+pub mod download;
 pub mod github;
+pub mod license;
 pub mod manifest;
 pub mod script;
 pub mod songs;
@@ -753,6 +756,12 @@ async fn search_one(
             *slot = local;
         }
     }
+    // What each result says about its licence now replaces what was saved before.
+    let licenses: Vec<(&str, Option<&license::OpenLicense>)> =
+        items.iter().map(|i| (i.track.item_id.as_str(), i.license.as_ref())).collect();
+    if let Err(e) = db::extensions::save_licenses(db, &licenses, now_unix()).await {
+        tracing::warn!(extension = %spec.id(), error = %e, "licences not saved");
+    }
     Ok(items.into_iter().zip(found).collect())
 }
 
@@ -1088,6 +1097,89 @@ mod tests {
         assert!(mgr.search("anything").await.unwrap().is_empty(), "not searched");
         assert_eq!(mgr.resolve_stream("amazon:t1").await.unwrap_err().code, refused);
         mgr.set_enabled("amazon", false).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn downloads_only_open_licence_sources_and_attaches_the_file_to_the_song() {
+        let (dir, server, mgr) = setup().await;
+        let base = server.uri();
+        let wav_dir = tempfile::tempdir().unwrap();
+        let wav = wav_dir.path().join("t.wav");
+        crate::core::local::testing::write_wav(&wav, 1.0, 7);
+        let wav_bytes = std::fs::read(&wav).unwrap();
+        Mock::given(method("GET"))
+            .and(path("/s/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "items": [
+                { "id": "free", "title": "Free Song", "artist": "Open Artist", "ms": 1000,
+                  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/" },
+                { "id": "closed", "title": "Closed Song", "artist": "Label", "ms": 1000, "license": "All rights reserved" }
+            ]})))
+            .mount(&server)
+            .await;
+        for id in ["free", "closed"] {
+            Mock::given(method("GET"))
+                .and(path(format!("/s/audio/{id}.flac")))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(wav_bytes.clone()).insert_header("Content-Type", "audio/wav"))
+                .mount(&server)
+                .await;
+        }
+        let script = SCRIPT.replace(
+            "id: i.id, name: i.title,",
+            "id: i.id, name: i.title, license: i.license, license_url: i.license_url,",
+        );
+        let pkg = script_package(&base, &script);
+        let digest = package::sha256_hex(&pkg);
+        Mock::given(method("GET")).and(path("/pkg/m.sflx")).respond_with(ResponseTemplate::new(200).set_body_bytes(pkg)).mount(&server).await;
+        mgr.install(&format!("{base}/pkg/m.sflx"), &digest).await.unwrap();
+
+        let found = mgr.search_all("song").await.unwrap();
+        assert_eq!(found.songs.len(), 2);
+        let detail = mgr.song("mock-stream:free").await.unwrap();
+        assert_eq!(detail.song.sources[0].license.as_ref().map(|l| l.name.as_str()), Some("CC BY-SA 4.0"));
+        assert!(mgr.song("mock-stream:closed").await.unwrap().song.sources[0].license.is_none());
+
+        assert_eq!(mgr.prepare_download("mock-stream:closed", "mock-stream:closed").await.unwrap_err().code, ErrorCode::DownloadNotAllowed);
+        assert_eq!(mgr.download_license("other:free").await.unwrap_err().code, ErrorCode::ExtensionDisabled);
+
+        let track_id = mgr.prepare_download("mock-stream:free", "mock-stream:free").await.unwrap();
+        let music = dir.path().join("Music");
+        let mut seen = 0u64;
+        let saved = mgr
+            .download_source("mock-stream:free", &["Open Artist".into()], "Free Song", &music, &mut |r, _| seen = r)
+            .await
+            .unwrap();
+        assert_eq!(saved, music.join("Open Artist - Free Song.wav"));
+        assert_eq!(std::fs::read(&saved).unwrap(), wav_bytes);
+        assert_eq!(seen, wav_bytes.len() as u64);
+        assert_eq!(std::fs::read_dir(&music).unwrap().count(), 1, "no .part file left");
+        let again = mgr
+            .download_source("mock-stream:free", &["Open Artist".into()], "Free Song", &music, &mut |_, _| {})
+            .await
+            .unwrap();
+        assert_eq!(again, music.join("Open Artist - Free Song (2).wav"), "never overwrites");
+
+        let exts: Vec<String> = crate::model_player::DEFAULT_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect();
+        crate::core::local::import::attach(&mgr.db, &track_id, &saved, &exts, dir.path().join("art")).await.unwrap();
+        let local: Vec<String> = sqlx::query_scalar("SELECT url FROM track_sources WHERE track_id = ?1 AND provider = 'local'")
+            .bind(&track_id)
+            .fetch_all(&mgr.db)
+            .await
+            .unwrap();
+        assert_eq!(local, vec![saved.to_string_lossy().into_owned()], "the file is the same song's local source");
+
+        // A later search that no longer reports the licence takes Download away again.
+        server.reset().await;
+        Mock::given(method("GET"))
+            .and(path("/s/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "items": [{ "id": "free", "title": "Free Song", "artist": "Open Artist" }]})))
+            .mount(&server)
+            .await;
+        mgr.search_all("song again").await.unwrap();
+        assert_eq!(mgr.download_license("mock-stream:free").await.unwrap_err().code, ErrorCode::DownloadNotAllowed);
+
+        // Turned off: never downloads.
+        mgr.set_enabled("mock-stream", false).await.unwrap();
+        assert_eq!(mgr.download_license("mock-stream:free").await.unwrap_err().code, ErrorCode::ExtensionDisabled);
     }
 
     #[tokio::test]

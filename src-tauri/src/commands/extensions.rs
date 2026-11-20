@@ -120,6 +120,15 @@ pub async fn extension_play_song(
     })
 }
 
+/// Downloads a song from one of its sources (only one with an open licence) into the music
+/// folder, where it becomes the song's local file. Returns the job id; the outcome arrives as
+/// `download://progress`.
+#[tauri::command]
+#[specta::specta]
+pub async fn extension_download(app: AppHandle, key: String, source_key: String) -> AppResult<u32> {
+    crate::core::extensions::download::start(&app, &key, &source_key).await
+}
+
 /// Likes or unlikes a song. Returns the new state.
 #[tauri::command]
 #[specta::specta]

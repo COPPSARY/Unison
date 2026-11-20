@@ -20,7 +20,7 @@ fn destination(file: &Path, roots: &[PathBuf], target: &Path) -> PathBuf {
 }
 
 /// `name.mp3` → `name (2).mp3` … for the first free name.
-fn free_name(path: &Path) -> PathBuf {
+pub(crate) fn free_name(path: &Path) -> PathBuf {
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let ext = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
     (2..)

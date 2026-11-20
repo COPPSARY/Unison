@@ -16,6 +16,8 @@ pub const MAX_JSON_BYTES: usize = 2 * 1024 * 1024;
 /// Largest artwork image fetched into the cache.
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
+/// A whole-file download may take this long.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Clone)]
 pub struct ExtHttp {
@@ -45,7 +47,7 @@ impl ExtHttp {
     /// Sends a GET, following up to five redirects, each checked against `hosts`.
     /// Returns the final URL and response (2xx only).
     async fn get(&self, url: Url, hosts: &[String], range_probe: bool) -> AppResult<(Url, Response)> {
-        self.get_checked(url, &|u| check_url(u, hosts), range_probe, &[]).await
+        self.get_checked(url, &|u| check_url(u, hosts), range_probe, &[], None).await
     }
 
     /// `headers` go only to the first URL's host; a redirect elsewhere drops them.
@@ -55,11 +57,15 @@ impl ExtHttp {
         check: &(dyn Fn(&Url) -> AppResult<()> + Sync),
         range_probe: bool,
         headers: &[(String, String)],
+        timeout: Option<Duration>,
     ) -> AppResult<(Url, Response)> {
         let origin = url.host_str().map(str::to_ascii_lowercase);
         for _ in 0..=MAX_REDIRECTS {
             check(&url)?;
             let mut req = self.client.get(url.clone());
+            if let Some(t) = timeout {
+                req = req.timeout(t);
+            }
             if range_probe {
                 req = req.header(RANGE, "bytes=0-0").header(ACCEPT_ENCODING, "identity");
             }
@@ -123,7 +129,7 @@ impl ExtHttp {
                 other => Err(host_not_allowed(format!("{other} is not https"))),
             }
         };
-        let (_, resp) = self.get_checked(url, &check, false, &[]).await?;
+        let (_, resp) = self.get_checked(url, &check, false, &[], None).await?;
         Self::body(resp, cap).await
     }
 
@@ -142,7 +148,7 @@ impl ExtHttp {
     /// The one-byte probe of a stream: final URL, total length and content type. `headers`
     /// are sent to the stream's own host only.
     pub async fn probe_stream(&self, url: Url, hosts: &[String], headers: &[(String, String)]) -> AppResult<StreamProbe> {
-        let (url, resp) = self.get_checked(url, &|u| check_url(u, hosts), true, headers).await?;
+        let (url, resp) = self.get_checked(url, &|u| check_url(u, hosts), true, headers, None).await?;
         let len = resp
             .headers()
             .get(CONTENT_RANGE)
@@ -152,6 +158,44 @@ impl ExtHttp {
             .or_else(|| (resp.status() == StatusCode::OK).then(|| resp.content_length()).flatten());
         let content_type = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_owned);
         Ok(StreamProbe { url, len, content_type })
+    }
+}
+
+impl ExtHttp {
+    /// Saves a whole audio file into `out` (EXT-07): every hop checked against `hosts`,
+    /// `headers` only to the first host, at most `cap` bytes, `progress(received, total)` after
+    /// each chunk. Returns the content type.
+    pub async fn download(
+        &self,
+        url: Url,
+        hosts: &[String],
+        headers: &[(String, String)],
+        out: &mut (dyn std::io::Write + Send),
+        cap: u64,
+        progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
+    ) -> AppResult<Option<String>> {
+        let mut headers = headers.to_vec();
+        headers.push((ACCEPT_ENCODING.as_str().to_owned(), "identity".to_owned()));
+        let (_, mut resp) =
+            self.get_checked(url, &|u| check_url(u, hosts), false, &headers, Some(DOWNLOAD_TIMEOUT)).await?;
+        let total = resp.content_length();
+        if total.is_some_and(|n| n > cap) {
+            return Err(AppError::new(ErrorCode::ExtensionFailed, "the file is too large"));
+        }
+        let content_type = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_owned);
+        let mut received = 0u64;
+        while let Some(chunk) = resp.chunk().await.map_err(|e| network_error(&e))? {
+            received += chunk.len() as u64;
+            if received > cap {
+                return Err(AppError::new(ErrorCode::ExtensionFailed, "the file is too large"));
+            }
+            out.write_all(&chunk)?;
+            progress(received, total);
+        }
+        if total.is_some_and(|n| n != received) {
+            return Err(AppError::new(ErrorCode::Offline, "the download stopped early"));
+        }
+        Ok(content_type)
     }
 }
 
