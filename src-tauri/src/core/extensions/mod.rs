@@ -39,7 +39,8 @@ use crate::core::now_unix;
 use crate::core::db;
 use crate::core::db::extensions::Spec;
 use crate::core::db::library::TrackInput;
-use crate::core::playback::native::StreamResolver;
+use crate::core::playback::engine::SourceFinder;
+use crate::core::playback::native::{StreamResolver, StreamTarget};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::model::{SourceKind, Track, TrackSource};
 
@@ -311,6 +312,10 @@ pub struct ExtensionManager {
     search_cancel: Mutex<Arc<AtomicBool>>,
     /// Last merged search songs, by every source key they hold.
     songs: Mutex<HashMap<String, songs::Song>>,
+    /// Tracks no streaming extension had, and when that was found (EXT-05).
+    misses: Mutex<HashMap<String, std::time::Instant>>,
+    /// Extensions whose getDownloadUrl answered null (a stub: they only download).
+    download_only: Mutex<std::collections::HashSet<String>>,
 }
 
 impl ExtensionManager {
@@ -334,6 +339,8 @@ impl ExtensionManager {
             remembered: Mutex::new(HashMap::new()),
             search_cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
             songs: Mutex::new(HashMap::new()),
+            misses: Mutex::new(HashMap::new()),
+            download_only: Mutex::new(std::collections::HashSet::new()),
         })
     }
 
@@ -616,15 +623,20 @@ impl ExtensionManager {
         }
     }
 
-    /// The allowlisted audio URL for a source key, resolved now (stream URLs may expire).
-    pub async fn resolve_stream(&self, key: &str) -> AppResult<String> {
+    /// The allowlisted audio stream for a source key, resolved now (stream URLs may expire):
+    /// the final URL after redirects, the headers its service asked for (only while the URL
+    /// stays on the host the extension named) and what the probe learned.
+    pub async fn resolve_stream(&self, key: &str) -> AppResult<StreamTarget> {
         let (ext_id, item_id) =
             split_key(key).ok_or_else(|| AppError::new(ErrorCode::ExtensionFailed, "bad extension source key"))?;
         let installed = self.enabled(ext_id).await?;
         let chosen = installed.quality;
         let tier = db::settings::load(&self.db).await?.player.stream_quality;
-        let (url, hosts) = match installed.spec {
-            Spec::Declarative(m) => (self.declarative_stream(&m, item_id).await?, m.hosts),
+        let (answer, hosts) = match installed.spec {
+            Spec::Declarative(m) => {
+                let url = self.declarative_stream(&m, item_id).await?;
+                (script::StreamAnswer { url, headers: Vec::new(), mime: None }, m.hosts)
+            }
             Spec::Script { manifest, code } => {
                 if !manifest.can_stream() {
                     return Err(AppError::new(ErrorCode::ExtensionUnsupported, "extension has no getDownloadUrl"));
@@ -644,12 +656,26 @@ impl ExtensionManager {
                     )
                         .await?
                         .ok_or_else(|| AppError::new(ErrorCode::ExtensionUnsupported, "extension has no getDownloadUrl"))?;
-                let url = script::stream_url(&answer)?;
-                manifest::check_url(&url, &manifest.hosts)?;
-                (url, manifest.hosts)
+                if answer.is_null() {
+                    // A stub: this extension never streams. Skip it from now on.
+                    tracing::info!(extension = %manifest.id, "getDownloadUrl is a stub; treating the extension as download-only");
+                    if let Ok(mut set) = self.download_only.lock() {
+                        set.insert(manifest.id.clone());
+                    }
+                }
+                let answer = script::stream_answer(&answer)?;
+                manifest::check_url(&answer.url, &manifest.hosts)?;
+                (answer, manifest.hosts)
             }
         };
-        Ok(self.http.final_stream_url(url, &hosts).await?.to_string())
+        let probe = self.http.probe_stream(answer.url.clone(), &hosts, &answer.headers).await?;
+        let same_host = probe.url.host_str().map(str::to_ascii_lowercase) == answer.url.host_str().map(str::to_ascii_lowercase);
+        Ok(StreamTarget {
+            url: probe.url.to_string(),
+            headers: if same_host { answer.headers } else { Vec::new() },
+            mime: answer.mime,
+            known: probe.len.map(|len| (len, probe.content_type)),
+        })
     }
 
     async fn declarative_stream(&self, m: &Manifest, item_id: &str) -> AppResult<Url> {
@@ -733,15 +759,29 @@ fn as_track(item: &MappedItem, artwork: Option<String>) -> Track {
 
 #[async_trait]
 impl StreamResolver for ExtensionManager {
+    /// Enabled and gives streams: a metadata-only source is skipped, not loaded and failed.
     async fn available(&self, key: &str) -> bool {
         match split_key(key) {
-            Some((ext, _)) => self.enabled(ext).await.is_ok(),
+            Some((ext, _)) => self.enabled(ext).await.is_ok_and(|i| self.streams(&i.spec)),
             None => false,
         }
     }
 
-    async fn resolve(&self, key: &str) -> AppResult<String> {
+    async fn resolve(&self, key: &str) -> AppResult<StreamTarget> {
         self.resolve_stream(key).await
+    }
+}
+
+#[async_trait]
+impl SourceFinder for ExtensionManager {
+    async fn find_more(&self, track_id: &str) -> bool {
+        match self.find_stream_source(track_id).await {
+            Ok(found) => found,
+            Err(e) => {
+                tracing::warn!(error = %e, "looking for a stream source failed");
+                false
+            }
+        }
     }
 }
 
@@ -839,7 +879,7 @@ mod tests {
         assert_eq!(ids, again, "saving twice keeps one track row");
         assert!(mgr.save_tracks(&["good-ext:zzz".to_owned()]).await.is_err());
 
-        let stream = mgr.resolve_stream("good-ext:t1").await.unwrap();
+        let stream = mgr.resolve_stream("good-ext:t1").await.unwrap().url;
         assert!(stream.ends_with("/cdn/t1.mp3"), "{stream}");
         assert!(mgr.available("good-ext:t1").await);
 
@@ -877,7 +917,7 @@ mod tests {
             .await;
         Mock::given(method("GET")).and(path("/audio/ab.mp3")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
         mgr.install("https://github.com/acme/res/tree/main", SHA).await.unwrap();
-        let url = mgr.resolve_stream("res-ext:a b").await.unwrap();
+        let url = mgr.resolve_stream("res-ext:a b").await.unwrap().url;
         assert!(url.ends_with("/audio/ab.mp3"), "{url}");
     }
 
@@ -965,7 +1005,7 @@ mod tests {
 
         let ids = mgr.save_tracks(&["mock-stream:t1".to_owned()]).await.unwrap();
         assert_eq!(ids.len(), 1);
-        let stream = mgr.resolve_stream("mock-stream:t1").await.unwrap();
+        let stream = mgr.resolve_stream("mock-stream:t1").await.unwrap().url;
         assert!(stream.ends_with("/s/audio/t1.flac?q=HI_RES"), "{stream}");
 
         mgr.remove("mock-stream").await.unwrap();
@@ -1155,11 +1195,11 @@ mod tests {
 
         // Play from the second source at Hi-Res: it streams first, at that quality.
         let id = mgr.prepare_play(&song.key, "store-b:store-b-1", Some("HI_RES")).await.unwrap();
-        let candidates = crate::core::playback::resolver::Resolver { db: mgr.db.clone() };
+        let candidates = crate::core::playback::resolver::Resolver::new(mgr.db.clone());
         use crate::core::playback::engine::Candidates;
         let order = candidates.candidates(&id).await.unwrap();
         assert_eq!(order.iter().map(|c| c.item_id.as_str()).collect::<Vec<_>>(), ["store-b:store-b-1", "store-a:store-a-1"]);
-        let url = mgr.resolve_stream("store-b:store-b-1").await.unwrap();
+        let url = mgr.resolve_stream("store-b:store-b-1").await.unwrap().url;
         assert!(url.ends_with("/audio/store-b-1?q=HI_RES"), "{url}");
         // An unknown quality is ignored: no match for the High tier here, so the extension's default.
         mgr.prepare_play(&song.key, "store-b:store-b-1", Some("8K")).await.unwrap();
@@ -1182,5 +1222,208 @@ mod tests {
         assert_eq!(albums.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["Album"]);
         assert!(!mgr.like_song(&song.key, false).await.unwrap());
         assert!(crate::core::db::views::albums(&mgr.db, None, crate::model::LibrarySort::Title, None).await.unwrap().is_empty());
+    }
+
+    /// Installs a script package built from `manifest` and `code`.
+    async fn install_script(server: &MockServer, mgr: &ExtensionManager, name: &str, manifest: Value, code: &str) {
+        let pkg = script::package::tests::build(&[("manifest.json", &manifest.to_string()), ("index.js", code)]);
+        let digest = package::sha256_hex(&pkg);
+        Mock::given(method("GET"))
+            .and(path(format!("/pkg/{name}.sflx")))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(pkg))
+            .mount(server)
+            .await;
+        mgr.install(&format!("{}/pkg/{name}.sflx", server.uri()), &digest).await.unwrap();
+    }
+
+    /// A metadata-only catalog ("catalog") and an extension that streams ("streamer") but only
+    /// finds songs when asked for "<artist> <title>", so the two never merge in Search.
+    async fn catalog_and_streamer(server: &MockServer, mgr: &ExtensionManager) {
+        let base = server.uri();
+        let manifest = |name: &str| {
+            json!({
+                "name": name, "version": "1.0.0",
+                "permissions": { "network": ["127.0.0.1"] }, "type": ["metadata_provider"],
+                "settings": [{ "key": "base", "type": "string", "label": "Base", "default": base }]
+            })
+        };
+        let catalog = r#"registerExtension({
+              searchTracks(q) { return [
+                { id: "c1", name: "Song One", artists: "Artist", duration_ms: 200000 },
+                { id: "c2", name: "Rare Song", artists: "Nobody", duration_ms: 100000 },
+              ]; },
+            });"#;
+        install_script(server, mgr, "catalog", manifest("catalog"), catalog).await;
+        let streamer = r#"let cfg = {};
+            registerExtension({
+              initialize(c) { cfg = c; return true; },
+              searchTracks(q) {
+                if (q === "Artist Song One") return [
+                  { id: "live", name: "Song One (Live at Wembley)", artists: "Artist", duration_ms: 260000 },
+                  { id: "s1", name: "Song One", artists: "Artist", duration_ms: 200500 },
+                ];
+                if (q === "Nobody Rare Song") return [{ id: "x", name: "Rare Song Cover", artists: "Someone", duration_ms: 90000 }];
+                return [];
+              },
+              getDownloadUrl(id, quality) {
+                return { url: cfg.base + "/audio/" + id + ".flac", mimeType: "audio/flac",
+                         headers: { Referer: cfg.base + "/", "X-Not-Allowed": "1" } };
+              },
+            });"#;
+        install_script(server, mgr, "streamer", manifest("streamer"), streamer).await;
+    }
+
+    #[tokio::test]
+    async fn a_metadata_only_song_plays_through_an_extension_that_streams() {
+        use crate::core::playback::engine::Candidates;
+        let (_dir, server, mgr) = setup().await;
+        catalog_and_streamer(&server, &mgr).await;
+        let base = server.uri();
+        Mock::given(method("GET"))
+            .and(path("/audio/s1.flac"))
+            .and(wiremock::matchers::header("referer", format!("{base}/").as_str()))
+            .respond_with(
+                ResponseTemplate::new(206)
+                    .insert_header("Content-Range", "bytes 0-0/123456")
+                    .insert_header("Content-Type", "audio/flac"),
+            )
+            .mount(&server)
+            .await;
+
+        let all = mgr.search_all("song").await.unwrap();
+        let song = all.songs.iter().find(|s| s.title == "Song One").unwrap();
+        assert_eq!(song.sources.len(), 1, "Search alone finds only the catalog");
+        let id = mgr.prepare_play(&song.key, &song.key, None).await.unwrap();
+        assert!(!mgr.available("catalog:c1").await, "a metadata-only source is skipped, not loaded");
+
+        // What the player does when nothing can play: look for the same song elsewhere.
+        assert!(mgr.find_stream_source(&id).await.unwrap());
+        let resolver = crate::core::playback::resolver::Resolver::new(mgr.db.clone());
+        let keys: Vec<String> = resolver.candidates(&id).await.unwrap().into_iter().map(|c| c.item_id).collect();
+        assert!(keys.contains(&"streamer:s1".to_owned()), "the strict match, not the live version: {keys:?}");
+        assert!(!keys.contains(&"streamer:live".to_owned()));
+        assert!(mgr.available("streamer:s1").await);
+
+        let target = mgr.resolve_stream("streamer:s1").await.unwrap();
+        assert!(target.url.ends_with("/audio/s1.flac"), "{target:?}");
+        assert_eq!(target.headers, vec![("referer".to_owned(), format!("{base}/"))], "allowlisted headers only");
+        assert_eq!(target.mime.as_deref(), Some("audio/flac"));
+        assert_eq!(target.known, Some((123_456, Some("audio/flac".to_owned()))), "the player needn't probe again");
+        // The song page lists the new source.
+        let page = mgr.song(&song.key).await.unwrap();
+        assert!(page.song.sources.iter().any(|s| s.key == "streamer:s1" && s.can_play));
+        // Already attached: nothing more to find.
+        assert!(!mgr.find_stream_source(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_download_only_stub_never_hides_an_extension_that_streams() {
+        let (_dir, server, mgr) = setup().await;
+        // Installed first, so it comes first: finds the song, but getDownloadUrl is a stub.
+        let stub = r#"registerExtension({
+              searchTracks(q) { return q === "Artist Song One"
+                ? [{ id: "d1", name: "Song One", artists: "Artist", duration_ms: 200000 }] : []; },
+              getDownloadUrl() { return null; },
+            });"#;
+        let manifest = json!({ "name": "stubby", "version": "1.0.0", "permissions": { "network": ["127.0.0.1"] } });
+        install_script(&server, &mgr, "stubby", manifest, stub).await;
+        catalog_and_streamer(&server, &mgr).await;
+        let all = mgr.search_all("song").await.unwrap();
+        let song = all.songs.iter().find(|s| s.title == "Song One").unwrap();
+        let id = mgr.prepare_play(&song.key, &song.key, None).await.unwrap();
+
+        assert!(mgr.find_stream_source(&id).await.unwrap());
+        assert!(mgr.available("stubby:d1").await, "not known as a stub yet");
+        assert!(mgr.available("streamer:s1").await, "both matches are attached");
+        let err = mgr.resolve_stream("stubby:d1").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ExtensionUnsupported);
+        assert!(!mgr.available("stubby:d1").await, "a null answer marks it download-only");
+        let page = mgr.song(&song.key).await.unwrap();
+        assert!(page.song.sources.iter().any(|s| s.key == "stubby:d1" && !s.can_play));
+        assert!(page.song.sources.iter().any(|s| s.key == "streamer:s1" && s.can_play));
+    }
+
+    /// Live check against real services with the extensions of a COPY of an app database:
+    /// `UNISON_LIVE_DB=<copy of unison.db> UNISON_LIVE_QUERY="artist title"
+    ///  cargo test -- --ignored live_play_through_installed_extensions --nocapture`
+    #[tokio::test]
+    #[ignore = "contacts real music services"]
+    async fn live_play_through_installed_extensions() {
+        use crate::core::playback::engine::Candidates;
+        use rodio::Source;
+        let path = std::env::var("UNISON_LIVE_DB").expect("UNISON_LIVE_DB");
+        let query = std::env::var("UNISON_LIVE_QUERY").unwrap_or_else(|_| "Arijit Singh Tum Hi Ho".into());
+        let pool = db::open(std::path::Path::new(&path)).await.unwrap();
+        let mgr = ExtensionManager::new(pool.clone(), None, Arc::new(MemoryStore::default())).unwrap();
+        let all = mgr.search_all(&query).await.unwrap();
+        for f in &all.failures {
+            println!("search failed: {} — {}", f.extension_name, f.error.message);
+        }
+        for r in mgr.search(&query).await.unwrap() {
+            for t in r.tracks.iter().take(6) {
+                println!("  [{}] {} — {:?} ({:?} ms) isrc {:?}", r.extension_id, t.title, t.artists, t.duration_ms, t.isrc);
+            }
+        }
+        let song = all.songs.first().expect("no results");
+        println!("song: {} — {:?} ({:?} ms) sources {:?}", song.title, song.artists, song.duration_ms,
+            song.sources.iter().map(|s| (&s.key, s.can_play)).collect::<Vec<_>>());
+        let id = mgr.prepare_play(&song.key, &song.key, None).await.unwrap();
+        let found = mgr.find_stream_source(&id).await.unwrap();
+        println!("find_stream_source: {found}");
+        let resolver = crate::core::playback::resolver::Resolver::new(pool.clone());
+        let mut played = false;
+        for c in resolver.candidates(&id).await.unwrap() {
+            if !mgr.available(&c.item_id).await {
+                println!("skip {} (doesn't stream)", c.item_id);
+                continue;
+            }
+            match mgr.resolve_stream(&c.item_id).await {
+                Err(e) => println!("resolve {} failed: {:?} {}", c.item_id, e.code, e.message),
+                Ok(target) => {
+                    println!("resolved {} → {target:?}", c.item_id);
+                    let decoded = tokio::task::spawn_blocking(move || {
+                        let client = reqwest::blocking::Client::builder().build().unwrap();
+                        let (stream, _h) = crate::core::playback::http_source::HttpSource::open_target(client, &target)
+                            .map_err(|e| e.to_string())?;
+                        let len = stream.len();
+                        let mut b = rodio::Decoder::builder().with_data(stream).with_byte_len(len).with_seekable(true);
+                        if let Some(h) = target.mime.as_deref().or(target.known.as_ref().and_then(|k| k.1.as_deref())) {
+                            let hint = if h.contains("mp4") || h.contains("m4a") || h.contains("aac") { "m4a" } else { h };
+                            b = b.with_hint(hint);
+                        }
+                        let mut d = b.build().map_err(|e| e.to_string())?;
+                        let dur = d.total_duration();
+                        let samples = d.by_ref().take(48_000).count();
+                        Ok::<_, String>((dur, samples))
+                    })
+                    .await
+                    .unwrap();
+                    println!("decode: {decoded:?}");
+                    if decoded.is_ok_and(|(_, n)| n > 0) {
+                        played = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(played, "no source of {:?} decoded", song.title);
+    }
+
+    #[tokio::test]
+    async fn a_different_song_is_never_attached_and_a_miss_is_remembered() {
+        let (_dir, server, mgr) = setup().await;
+        catalog_and_streamer(&server, &mgr).await;
+        let all = mgr.search_all("song").await.unwrap();
+        let rare = all.songs.iter().find(|s| s.title == "Rare Song").unwrap();
+        let id = mgr.prepare_play(&rare.key, &rare.key, None).await.unwrap();
+        assert!(!mgr.find_stream_source(&id).await.unwrap(), "a cover by someone else is not this song");
+        let sources: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM track_sources WHERE track_id = ?1")
+            .bind(&id)
+            .fetch_one(&mgr.db)
+            .await
+            .unwrap();
+        assert_eq!(sources, 1);
+        assert!(mgr.misses.lock().unwrap().contains_key(&id), "the miss is remembered");
+        assert!(!mgr.find_stream_source(&id).await.unwrap());
     }
 }

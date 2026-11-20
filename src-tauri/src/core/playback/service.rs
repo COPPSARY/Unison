@@ -118,8 +118,14 @@ fn provider_str(kind: SourceKind) -> &'static str {
 }
 
 impl PlayerService {
-    pub fn new(db: SqlitePool, engines: Vec<Arc<dyn Engine>>, volume: u8) -> Self {
-        let resolver = Arc::new(Resolver { db: db.clone() });
+    /// `finder` looks for more sources when a track's own can't play (the extensions).
+    pub fn new(
+        db: SqlitePool,
+        engines: Vec<Arc<dyn Engine>>,
+        volume: u8,
+        finder: Option<Arc<dyn super::engine::SourceFinder>>,
+    ) -> Self {
+        let resolver = Arc::new(Resolver { db: db.clone(), finder });
         // Volume applies when the first item loads.
         let player = Player::new(engines.clone(), resolver, Queue::default()).with_volume(volume);
         Self {

@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use reqwest::header::{LOCATION, RANGE};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, CONTENT_TYPE, LOCATION, RANGE};
 use reqwest::{Client, Response, StatusCode};
 use serde_json::Value;
 use url::Url;
@@ -45,20 +45,28 @@ impl ExtHttp {
     /// Sends a GET, following up to five redirects, each checked against `hosts`.
     /// Returns the final URL and response (2xx only).
     async fn get(&self, url: Url, hosts: &[String], range_probe: bool) -> AppResult<(Url, Response)> {
-        self.get_checked(url, &|u| check_url(u, hosts), range_probe).await
+        self.get_checked(url, &|u| check_url(u, hosts), range_probe, &[]).await
     }
 
+    /// `headers` go only to the first URL's host; a redirect elsewhere drops them.
     async fn get_checked(
         &self,
         mut url: Url,
         check: &(dyn Fn(&Url) -> AppResult<()> + Sync),
         range_probe: bool,
+        headers: &[(String, String)],
     ) -> AppResult<(Url, Response)> {
+        let origin = url.host_str().map(str::to_ascii_lowercase);
         for _ in 0..=MAX_REDIRECTS {
             check(&url)?;
             let mut req = self.client.get(url.clone());
             if range_probe {
-                req = req.header(RANGE, "bytes=0-0");
+                req = req.header(RANGE, "bytes=0-0").header(ACCEPT_ENCODING, "identity");
+            }
+            if url.host_str().map(str::to_ascii_lowercase) == origin {
+                for (name, value) in headers {
+                    req = req.header(name.as_str(), value.as_str());
+                }
             }
             let resp = req.send().await.map_err(|e| network_error(&e))?;
             let status = resp.status();
@@ -115,7 +123,7 @@ impl ExtHttp {
                 other => Err(host_not_allowed(format!("{other} is not https"))),
             }
         };
-        let (_, resp) = self.get_checked(url, &check, false).await?;
+        let (_, resp) = self.get_checked(url, &check, false, &[]).await?;
         Self::body(resp, cap).await
     }
 
@@ -128,9 +136,32 @@ impl ExtHttp {
     /// Follows redirects of a stream URL (one-byte Range probe) and returns where the audio is,
     /// so the player only ever opens an allowlisted URL.
     pub async fn final_stream_url(&self, url: Url, hosts: &[String]) -> AppResult<Url> {
-        let (url, _resp) = self.get(url, hosts, true).await?;
-        Ok(url)
+        Ok(self.probe_stream(url, hosts, &[]).await?.url)
     }
+
+    /// The one-byte probe of a stream: final URL, total length and content type. `headers`
+    /// are sent to the stream's own host only.
+    pub async fn probe_stream(&self, url: Url, hosts: &[String], headers: &[(String, String)]) -> AppResult<StreamProbe> {
+        let (url, resp) = self.get_checked(url, &|u| check_url(u, hosts), true, headers).await?;
+        let len = resp
+            .headers()
+            .get(CONTENT_RANGE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.rsplit('/').next())
+            .and_then(|v| v.parse::<u64>().ok())
+            .or_else(|| (resp.status() == StatusCode::OK).then(|| resp.content_length()).flatten());
+        let content_type = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_owned);
+        Ok(StreamProbe { url, len, content_type })
+    }
+}
+
+/// What the probe of a stream learned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamProbe {
+    pub url: Url,
+    /// Total length; `None` when the server didn't say (the player probes again).
+    pub len: Option<u64>,
+    pub content_type: Option<String>,
 }
 
 #[cfg(test)]

@@ -200,20 +200,54 @@ impl Player {
         };
         self.status = PlayerStatus::Loading;
         self.last_skips.clear();
-        let policy: Policy = self.candidates.policy().await;
         let force = self.force.take();
+        let mut tried = exclude.to_vec();
+        let mut last_error = match self.try_sources(&track_id, &mut tried, force).await? {
+            None => return Ok(()),
+            Some(err) => err,
+        };
+        // None of the track's own sources can play: look for the same song elsewhere (EXT-05),
+        // then try only what was added.
+        if force.is_none() && self.candidates.find_more(&track_id).await {
+            match self.try_sources(&track_id, &mut tried, None).await? {
+                None => return Ok(()),
+                Some(Some(err)) => last_error = Some(err),
+                Some(None) => {}
+            }
+        }
+
+        self.stop_active().await?;
+        self.status = PlayerStatus::Error;
+        // The last real failure says more than "no playable source", except "this source only
+        // downloads": by now every other source was tried too.
+        match last_error {
+            Some(err) if err.code != ErrorCode::ExtensionUnsupported => Err(err),
+            _ => Err(AppError::new(ErrorCode::NoPlayableSource, "no source of this track can play here")),
+        }
+    }
+
+    /// Tries the track's candidates not in `tried` (adding each to it). `None` when one plays;
+    /// else the last load error, if any source got as far as loading.
+    async fn try_sources(
+        &mut self,
+        track_id: &str,
+        tried: &mut Vec<PlaySource>,
+        force: Option<SourceKind>,
+    ) -> AppResult<Option<Option<AppError>>> {
+        let track_id = track_id.to_owned();
+        let policy: Policy = self.candidates.policy().await;
         let candidates: Vec<PlaySource> = self
             .candidates
             .candidates(&track_id)
             .await?
             .into_iter()
             .filter(|c| force.is_none_or(|f| c.kind == f))
-            .filter(|c| !exclude.contains(c))
+            .filter(|c| !tried.contains(c))
             .collect();
+        tried.extend(candidates.iter().cloned());
 
         let mut first_failure: Option<(SourceKind, UnavailableReason)> = None;
         let mut last_error: Option<AppError> = None;
-        let count = candidates.len();
         for source in candidates {
             if first_failure.is_some() && !policy.auto_fallback {
                 break;
@@ -237,7 +271,7 @@ impl Player {
             engine.set_volume(self.volume).await?;
             if let Err(err) = engine.load(&source, 0).await {
                 let reason = reason_for(&err);
-                tracing::info!(kind = ?source.kind, error = %err, "source failed to load");
+                tracing::warn!(kind = ?source.kind, error = %err, "source failed to load");
                 first_failure.get_or_insert((source.kind, reason.clone()));
                 self.last_skips.push((source.kind, reason));
                 last_error = Some(err);
@@ -253,16 +287,9 @@ impl Player {
             self.active = Some(source);
             self.status = PlayerStatus::Playing;
             self.disagree = 0;
-            return Ok(());
+            return Ok(None);
         }
-
-        self.stop_active().await?;
-        self.status = PlayerStatus::Error;
-        // One source that failed with a specific reason says more than "no playable source".
-        match last_error {
-            Some(err) if count == 1 => Err(err),
-            _ => Err(AppError::new(ErrorCode::NoPlayableSource, "no source of this track can play here")),
-        }
+        Ok(Some(last_error))
     }
 
     async fn stop_active(&mut self) -> AppResult<()> {
@@ -534,6 +561,54 @@ pub(crate) mod tests {
         }
         async fn policy(&self) -> Policy {
             self.1
+        }
+    }
+
+    /// One metadata-only source; `find_more` adds a playable one when `has_more`.
+    struct GrowingCandidates {
+        sources: Mutex<Vec<PlaySource>>,
+        has_more: bool,
+        asked: Mutex<u32>,
+    }
+
+    #[async_trait]
+    impl Candidates for GrowingCandidates {
+        async fn candidates(&self, _track_id: &str) -> AppResult<Vec<PlaySource>> {
+            Ok(self.sources.lock().unwrap().clone())
+        }
+        async fn find_more(&self, _track_id: &str) -> bool {
+            *self.asked.lock().unwrap() += 1;
+            if self.has_more {
+                self.sources.lock().unwrap().push(src(SourceKind::Extension, "streamer"));
+            }
+            self.has_more
+        }
+    }
+
+    #[tokio::test]
+    async fn a_track_with_no_playable_source_looks_for_more_once() {
+        for has_more in [true, false] {
+            let log: Log = Arc::new(Mutex::new(Vec::new()));
+            let ext = Arc::new(FakeEngine {
+                blocked: vec![("catalog".into(), UnavailableReason::NoSource)],
+                ..FakeEngine::plain(SourceKind::Extension, log.clone())
+            });
+            let candidates = Arc::new(GrowingCandidates {
+                sources: Mutex::new(vec![src(SourceKind::Extension, "catalog")]),
+                has_more,
+                asked: Mutex::new(0),
+            });
+            let mut p = Player::new(vec![ext], candidates.clone(), Queue::new(Rng::seeded(3)));
+            let played = p.play(ids(1), 0, None).await;
+            assert_eq!(*candidates.asked.lock().unwrap(), 1);
+            if has_more {
+                played.unwrap();
+                assert_eq!(loads(&log), vec!["Extension:load streamer"], "only the new source is tried");
+                assert_eq!(p.snapshot().status, PlayerStatus::Playing);
+            } else {
+                assert_eq!(played.unwrap_err().code, ErrorCode::NoPlayableSource);
+                assert_eq!(p.snapshot().status, PlayerStatus::Error);
+            }
         }
     }
 
