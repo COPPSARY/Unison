@@ -288,6 +288,15 @@ Acceptance criteria:
   Waiting for the owner's live check with an extension that reports CC licences (e.g. a
   Jamendo or Internet Archive extension). None of the installed ones do yet.
 
+### EXT-08 — Stream into a temporary file (owner request 2026-11-21)
+- Extension and Audius streams buffer into a temporary file in `<app cache>/stream-buffer`
+  instead of memory (2 GB cap; memory and the 300 MB cap remain the fallback when no cache
+  folder exists). The file is deleted when the stream is dropped (stop, next track, output
+  switch reload); leftovers from a crash are purged at launch. It is never added to the library
+  and nothing else is saved.
+- Tests: disk buffer byte-exact reads and seeks, deleted after drop, leftover purge.
+- Status (2026-11-21): built; clippy -D warnings, 179 Rust + 118 Vitest tests green (Windows).
+
 ## Done
 
 - **UP-10 — Local import pipeline** (2026-11-20): `core/matching` with the §8.1 normaliser and

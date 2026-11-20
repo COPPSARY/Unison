@@ -65,6 +65,11 @@ fn init_core(app: &tauri::App) -> Result<model::WindowMaterial, Box<dyn std::err
         e
     })?;
     let settings = tauri::async_runtime::block_on(core::db::settings::load(&pool)).unwrap_or_default();
+    // Extension streams buffer in a temporary file that is deleted when the track unloads.
+    match paths.app_cache_dir() {
+        Ok(dir) => core::playback::http_source::set_buffer_dir(dir.join("stream-buffer")),
+        Err(e) => tracing::warn!(error = %e, "no cache folder; streams buffer in memory"),
+    }
     let native = core::playback::native::NativeEngine::spawn(
         settings.player.output_device.clone(),
         settings.player.volume,

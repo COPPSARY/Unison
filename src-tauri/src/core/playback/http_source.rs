@@ -1,24 +1,140 @@
 //! Seekable HTTP audio source for the NativeEngine (UP-06, Audius streams).
 //!
-//! A download thread fills an in-memory buffer with HTTP `Range` requests; the decoder reads
-//! from that buffer. Seeking past the downloaded part restarts the download at the new
-//! offset. Nothing is written to disk. A failed connection sets an error flag and makes reads
-//! fail, so playback ends cleanly instead of panicking.
+//! A download thread fills a buffer with HTTP `Range` requests; the decoder reads from that
+//! buffer. Seeking past the downloaded part restarts the download at the new offset. A failed
+//! connection sets an error flag and makes reads fail, so playback ends cleanly instead of
+//! panicking.
+//!
+//! The buffer is a temporary file in the app's cache folder when one is set
+//! ([`set_buffer_dir`]), else memory. The temporary file only lives while the track is loaded:
+//! it is deleted when the stream is dropped (track changed, stopped or ended), and leftovers
+//! from a crash are deleted at the next launch. It is never added to the library.
 
-use std::io::{self, Read, Seek, SeekFrom};
-use std::sync::{Arc, Condvar, Mutex};
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 /// Buffer granularity: a block is readable once fully downloaded (or at end of file).
 const BLOCK: u64 = 32 * 1024;
-/// Refuse absurdly large streams (memory buffer).
+/// Refuse absurdly large streams buffered in memory.
 pub const MAX_STREAM_BYTES: u64 = 300 * 1024 * 1024;
+/// Largest stream buffered in a temporary file.
+pub const MAX_DISK_STREAM_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+const BUFFER_SUFFIX: &str = ".unison-buffer";
+
+static BUFFER_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Deletes stream buffers an earlier run left in `dir` (e.g. after a crash).
+fn purge(dir: &Path) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().ends_with(BUFFER_SUFFIX) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
+/// Streams buffer into temporary files in `dir` from now on, after deleting leftovers from
+/// an earlier run. Call once at startup; without it streams buffer in memory.
+pub fn set_buffer_dir(dir: PathBuf) {
+    purge(&dir);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!(error = %e, "stream buffer folder unavailable; buffering in memory");
+        return;
+    }
+    let _ = BUFFER_DIR.set(dir);
+}
+
+/// Where a stream's bytes are kept while it plays.
+#[derive(Debug)]
+enum Buffer {
+    Memory(Vec<u8>),
+    /// A temporary file, deleted when dropped.
+    Disk { file: Option<File>, path: PathBuf },
+}
+
+impl Buffer {
+    fn new(len: u64, dir: Option<&Path>) -> Result<Self, StreamError> {
+        let Some(dir) = dir else {
+            if len > MAX_STREAM_BYTES {
+                return Err(StreamError::new(format!("stream length {len} not supported")));
+            }
+            return Ok(Buffer::Memory(vec![0; usize::try_from(len).unwrap_or(0)]));
+        };
+        if len > MAX_DISK_STREAM_BYTES {
+            return Err(StreamError::new(format!("stream length {len} not supported")));
+        }
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let path = dir.join(format!("{}-{nanos:x}-{n}{BUFFER_SUFFIX}", std::process::id()));
+        let opened = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .and_then(|f| f.set_len(len).map(|()| f));
+        match opened {
+            Ok(file) => Ok(Buffer::Disk { file: Some(file), path }),
+            Err(e) => {
+                let _ = std::fs::remove_file(&path);
+                Err(StreamError::new(format!("stream buffer: {e}")))
+            }
+        }
+    }
+
+    fn write_at(&mut self, offset: u64, data: &[u8]) -> io::Result<()> {
+        match self {
+            Buffer::Memory(buf) => {
+                let from = usize::try_from(offset).map_err(io::Error::other)?;
+                buf[from..from + data.len()].copy_from_slice(data);
+                Ok(())
+            }
+            Buffer::Disk { file: Some(f), .. } => {
+                f.seek(SeekFrom::Start(offset))?;
+                f.write_all(data)
+            }
+            Buffer::Disk { file: None, .. } => Err(io::Error::other("stream buffer closed")),
+        }
+    }
+
+    fn read_at(&mut self, offset: u64, out: &mut [u8]) -> io::Result<()> {
+        match self {
+            Buffer::Memory(buf) => {
+                let from = usize::try_from(offset).map_err(io::Error::other)?;
+                out.copy_from_slice(&buf[from..from + out.len()]);
+                Ok(())
+            }
+            Buffer::Disk { file: Some(f), .. } => {
+                f.seek(SeekFrom::Start(offset))?;
+                f.read_exact(out)
+            }
+            Buffer::Disk { file: None, .. } => Err(io::Error::other("stream buffer closed")),
+        }
+    }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        if let Buffer::Disk { file, path } = self {
+            // Close first: Windows refuses to delete an open file.
+            drop(file.take());
+            if let Err(e) = std::fs::remove_file(&*path) {
+                tracing::warn!(error = %e, "stream buffer not deleted");
+            }
+        }
+    }
+}
 /// How long a read may wait for data before giving up.
 const READ_WAIT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
 struct State {
-    buf: Vec<u8>,
+    buf: Buffer,
     filled: Vec<bool>,
     /// Offset the reader needs that isn't downloaded yet (restart request).
     want: Option<u64>,
@@ -181,15 +297,26 @@ impl HttpSource {
         Self::open_target(client, &StreamTarget::url(url))
     }
 
-    /// Opens a target; probes it first unless its length is already known.
+    /// Opens a target; probes it first unless its length is already known. Buffers in the
+    /// folder set with [`set_buffer_dir`], else in memory.
     pub fn open_target(client: reqwest::blocking::Client, target: &StreamTarget) -> Result<(Self, StreamHandle), StreamError> {
+        Self::open_in(client, target, BUFFER_DIR.get().map(PathBuf::as_path))
+    }
+
+    /// Like [`Self::open_target`], buffering in a temporary file in `dir` (`None` = memory).
+    pub fn open_in(
+        client: reqwest::blocking::Client,
+        target: &StreamTarget,
+        dir: Option<&Path>,
+    ) -> Result<(Self, StreamHandle), StreamError> {
         let (final_url, len, content_type) = match &target.known {
             Some((len, content_type)) => (target.url.clone(), *len, content_type.clone()),
             None => probe(&client, target)?,
         };
-        if len == 0 || len > MAX_STREAM_BYTES {
-            return Err(StreamError::new(format!("stream length {len} not supported")));
+        if len == 0 {
+            return Err(StreamError::new("stream length 0 not supported"));
         }
+        let buf = Buffer::new(len, dir)?;
         // Headers belong to the host the source named, not to a CDN it redirected to.
         let headers = if same_host(&target.url, &final_url) { target.headers.clone() } else { Vec::new() };
 
@@ -197,7 +324,7 @@ impl HttpSource {
         let shared = Arc::new(Shared {
             len,
             state: Mutex::new(State {
-                buf: vec![0; usize::try_from(len).unwrap_or(0)],
+                buf,
                 filled: vec![false; blocks],
                 want: None,
                 error: None,
@@ -296,8 +423,11 @@ fn download(client: reqwest::blocking::Client, url: String, headers: Vec<(String
                 return;
             }
             let end = (offset + n as u64).min(shared.len);
-            let (from, to) = (usize::try_from(offset).unwrap_or(0), usize::try_from(end).unwrap_or(0));
-            s.buf[from..to].copy_from_slice(&chunk[..to - from]);
+            let count = usize::try_from(end - offset).unwrap_or(0);
+            if let Err(e) = s.buf.write_at(offset, &chunk[..count]) {
+                drop(s);
+                return fail(&shared, format!("stream buffer: {e}"));
+            }
             // A block is complete once this run (which began block-aligned at `start`) has
             // written all of it; the last block ends at the end of the file.
             let first = block_of(offset);
@@ -362,8 +492,7 @@ impl Read for HttpSource {
         // Serve up to the end of this block (always fully available once filled).
         let block_end = ((block as u64 + 1) * BLOCK).min(self.shared.len);
         let n = usize::try_from((block_end - self.pos).min(out.len() as u64)).unwrap_or(0);
-        let from = usize::try_from(self.pos).unwrap_or(0);
-        out[..n].copy_from_slice(&s.buf[from..from + n]);
+        s.buf.read_at(self.pos, &mut out[..n])?;
         self.pos += n as u64;
         Ok(n)
     }
@@ -526,6 +655,46 @@ pub(crate) mod tests {
         src.read_to_end(&mut tail).unwrap();
         assert_eq!(tail, body[299_995..]);
         assert!(handle.error().is_none());
+    }
+
+    #[test]
+    fn disk_buffer_reads_and_seeks_then_is_deleted_when_the_stream_is_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = data(400_000);
+        let url = serve(body.clone(), None);
+        let (mut src, handle) = HttpSource::open_in(client(), &StreamTarget::url(&url), Some(dir.path())).unwrap();
+        let buffers = || std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(buffers(), 1, "one temporary buffer while it plays");
+
+        src.seek(SeekFrom::Start(350_000)).unwrap();
+        let mut ten = [0u8; 10];
+        src.read_exact(&mut ten).unwrap();
+        assert_eq!(&ten, &body[350_000..350_010]);
+        src.seek(SeekFrom::Start(0)).unwrap();
+        let mut all = Vec::new();
+        src.read_to_end(&mut all).unwrap();
+        assert_eq!(all, body);
+        assert!(handle.error().is_none());
+
+        drop(src);
+        drop(handle);
+        // The download thread holds the buffer until it notices the stream closed.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while buffers() > 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(buffers(), 0, "deleted once the stream is gone");
+    }
+
+    #[test]
+    fn leftover_buffers_are_purged_and_other_files_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(format!("old{BUFFER_SUFFIX}")), b"x").unwrap();
+        std::fs::write(dir.path().join("keep.txt"), b"x").unwrap();
+        purge(dir.path());
+        let left: Vec<String> =
+            std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(left, vec!["keep.txt"]);
     }
 
     #[test]
